@@ -1,31 +1,31 @@
 # Technical Spec — Oh
 
-Shared memory for AI-coding teams. Capture every team member's AI coding sessions into one shared, secret-scrubbed "Team Brain," and expose it through a Claude Code skill so any teammate's agent can continue someone's work, ask why a change was made, auto-write standups, and flag issues.
+Shared memory for AI-coding teams. Capture each person's AI coding Sessions across tools, store them in a shared **Team Brain**, and expose it through an MCP-backed skill so a teammate's agent can **ask why a change was made — instead of interrupting the author to re-explain** (and, later, continue unfinished work, write standups, flag issues).
 
-See [`CONTEXT.md`](./CONTEXT.md) for terminology and [`docs/adr/`](./docs/adr/) for the load-bearing decisions.
+See [`CONTEXT.md`](./CONTEXT.md) for terminology and [`docs/adr/`](./docs/adr/) for the load-bearing decisions — especially [ADR 0006](./docs/adr/0006-pivot-small-team-re-explaining-loop.md) (build for small teams, dogfood the loop), which reframes the scope below.
 
 ---
 
 ## Architecture: "one engine, many views"
 
-All features read the same data. Build the core **once** (the Engine); every feature is a **View** on top. See [ADR 0001](./docs/adr/0001-one-engine-many-views.md).
+All features read the same data. Build the core **once** (the Engine); every feature is a **View** on top. See [ADR 0001](./docs/adr/0001-one-engine-many-views.md). *(This is the eventual vision — see v0 below for what to actually build first.)*
 
 ### The Engine (shared Team Brain)
 
-**1. Capture** — a lightweight per-dev client tails each AI tool's local session files and streams deltas up *near-live*.
+**1. Capture** — a lightweight per-dev client tails each AI tool's local session files and streams deltas up.
 - Claude Code stores transcripts as append-only JSONL at `~/.claude/projects/<sanitized-cwd>/<session-uuid>.jsonl` — one event per line (user/assistant messages, `tool_use`, `tool_result`), timestamped. **Verify against current Claude Code docs before building.**
-- Capture mechanism: a **file-watcher on the JSONL** (most robust) plus Claude Code **hooks** (`SessionStart` / `Stop` / `SessionEnd` / `PostToolUse`) to flush promptly.
-- **v1 = Claude Code only.** Later: Cursor, Codex, Gemini CLI, etc. (mnemo demonstrates multi-tool parsing is tractable.)
-- **Near-live is a hard requirement** — Handoff is useless on stale state. Summaries can lag; capture cannot.
+- Capture mechanism: a **file-watcher on the JSONL** (most robust) plus tool **hooks** (`SessionStart` / `Stop` / `SessionEnd` / `PostToolUse`) to flush promptly.
+- **Cross-tool from the start** — Codex + Claude (what the team actually uses), because cross-tool neutrality is the wedge against platform risk (see [ADR 0006](./docs/adr/0006-pivot-small-team-re-explaining-loop.md)). Add Cursor, Gemini CLI, etc. as you grow. (mnemo demonstrates multi-tool parsing is tractable.)
+- **Latency:** the re-explaining loop tolerates some lag; near-live only becomes a hard requirement for Handoff (a later View).
 
-**2. Scrub (mandatory, pre-storage)** — secret detection/redaction on every chunk *before it leaves the machine*.
+**2. Scrub (pre-storage, before external data)** — secret detection/redaction on every chunk *before it leaves the machine*.
 - Regex + entropy detection (gitleaks / detect-secrets / trufflehog rule-sets).
-- Replace secrets with placeholders; emit a "secret detected" event for the security View.
-- **The Team Brain must never hold a live credential.** This is the price of being allowed to store anything — not an optional feature.
+- Replace secrets with placeholders; emit a "secret detected" event.
+- **The Team Brain must never hold a live credential** once it holds anyone-but-yourself's data. *Skippable for the founders' own dogfood; mandatory before another team's data lands.*
 
 **3. Store + index** — per-person, per-project, per-session.
-- Scrubbed transcript in Postgres / object storage.
-- Chunked + embedded into a vector store for semantic query (**Supabase + pgvector** for v1).
+- Scrubbed transcript in Postgres / object storage. **The raw (scrubbed) Session is retained by design** — summaries and Ask-why synthesis are Views over it, not a replacement, and not a privacy mechanism. See [ADR 0004](./docs/adr/0004-summaries-are-a-view-not-privacy.md).
+- Chunked + embedded into a vector store for semantic query (**Supabase + pgvector** when you need it).
 - Metadata: who, when, repo, branch, files touched, tool calls, token counts, linked commits/PRs.
 
 **4. Link to code** — connect a Session to the commit/PR it produced (the crux of "ask why about *this* change").
@@ -33,62 +33,85 @@ All features read the same data. Build the core **once** (the Engine); every fea
 - Fallback: correlate by repo + author + timestamp window + files touched.
 - Plus: GitHub/GitLab webhook on PR open → match to recent Sessions.
 
-**5. Query API** — semantic + structured query over the team's Sessions, **permission-filtered** by the org's Visibility Policy.
+**5. Query API** — semantic + structured query over the team's Sessions, **permission-filtered** by the Visibility Policy.
+- Also serves *self-scoped* queries — a developer's agent over their *own* Sessions (self-resume / the free solo tier). Nearly free given the Engine, but the personal on-ramp, not a team View. See [ADR 0005](./docs/adr/0005-self-resume-is-the-funnel-not-the-wedge.md).
 
 ### The Views
 
 | View | Trigger | Output |
 |------|---------|--------|
-| **Handoff** *(lead)* | Human, on demand | A *resumable plan + current state* of a teammate's unfinished work, dropped into the picker's agent. |
-| **Ask-why** *(co-primary)* | Human, during PR review | A *synthesised answer with citations* (link to the exact Session moment). Never raw-transcript browsing. |
-| **Daily Summary / Standup** | Automatic, EOD | What each person *shipped*, anchored to merged PRs/commits cross-checked with the Session (not chat volume). Dev sees their own; can add a correction. |
-| **Flags** | Automatic, per session | Findings against a ruleset: token waste, secret leakage (always escalates), process compliance. Visibility = org-configurable. |
+| **Ask-why** *(the wedge)* | Human, on demand / during review | A *synthesised answer with citations* to "why was this done?" — querying a teammate's reasoning instead of making them re-explain. Never raw-transcript browsing. |
+| **Handoff** *(later)* | Human, on demand | A *resumable plan + current state* of a teammate's unfinished work, dropped into the picker's agent. |
+| **Daily Summary / Standup** *(later)* | Automatic, EOD | What each person *shipped*, anchored to merged PRs/commits cross-checked with the Session. Dev sees their own; can add a correction. |
+| **Flags** *(later)* | Automatic, per session | Findings against a ruleset: token waste, secret leakage, process compliance. Visibility = configurable. |
 
-Handoff and Ask-why are the same retrieval pointed at different times — present vs past. Summaries and Flags are the same retrieval run automatically instead of on demand.
+Ask-why and Handoff are the same retrieval pointed at different times — past vs present. Summaries and Flags are the same retrieval run automatically instead of on demand.
 
 ### Access layer
 
-- A **Claude Code skill** is the front door — any teammate's Claude invokes Handoff/Ask-why naturally. It wraps an **MCP server** that calls the Query API. *Skill = trigger/UX; MCP = engine connection.*
-- Optional web dashboard for summaries, flags, and admin.
+- A **skill** is the front door — a teammate's agent invokes Ask-why naturally. It wraps an **MCP server** that calls the Query API. *Skill = trigger/UX; MCP = engine connection.*
+- Optional web dashboard (later) for summaries, flags, and admin.
 
-### Data architecture & deployment — **key decision**
+### Data architecture & deployment — **key decision (enterprise-stage)**
 
-- Multi-tenant SaaS cloud ships fastest, but storing a company's entire AI-coding history (with proprietary code context) in *your* cloud is a hard enterprise-security sell.
-- Design the **data plane separable from the control plane** so a **"deploy-in-their-cloud / self-host"** option exists from day one.
-- Per-org isolation; SSO; RBAC enforcing the Visibility Policies.
-- *Open decision — see below.*
+- Multi-tenant SaaS cloud ships fastest, but storing a company's entire AI-coding history in *your* cloud is a hard enterprise-security sell.
+- Design the **data plane separable from the control plane** so a **"deploy-in-their-cloud / self-host"** option exists when an enterprise demands it.
+- Per-org isolation; SSO; RBAC enforcing Visibility Policies.
+- *Deferred until you move up-market — not needed for the dogfood.*
 
 ### Suggested stack
 
-- **Capture client:** TypeScript or Go CLI + file watcher + Claude Code hooks.
-- **Backend:** Supabase (Postgres + pgvector + auth + storage) for v1.
-- **Intelligence:** off-the-shelf embedding model for retrieval; Claude for summary/answer synthesis.
-- **Access:** standard MCP server (Node/Python); a Claude Code skill packaging the calls.
+- **Capture client:** TypeScript or Go CLI + file watcher + tool hooks.
+- **Backend:** Supabase (Postgres + pgvector + auth + storage) when you outgrow a flat shared store.
+- **Intelligence:** off-the-shelf embedding model for retrieval; Claude for answer synthesis.
+- **Access:** standard MCP server (Node/Python); a skill packaging the calls.
 
 ---
 
-## v1 scope (what actually ships)
+## v0 — dogfood (build this first)
 
-- Claude Code only → Capture → Scrub → store/index for one team.
-- Killer Views: **Handoff** + **Ask-why in PR review.**
-- Org buys; SSO; basic admin; configurable visibility.
-- **Defer:** other tools, the full Flags suite, fancy dashboards, the post-training-data play.
+The thinnest thing that solves the founders' own pain, run on their own teams. See [ADR 0006](./docs/adr/0006-pivot-small-team-re-explaining-loop.md).
+
+- **Cross-tool day one** (Codex + Claude): tail each tool's session files into a shared store.
+- **Retrieval is the core — build it for real.** Chunk Sessions, embed the chunks (**pgvector** + an embedding API), and keep metadata (who, when, repo, linked commit) for optional filtering. Don't skip this: semantic search *is* the product, and coding Sessions are far too token-heavy to brute-force into a context window.
+- **The one tool — `ask`:**
+
+  ```
+  ask(question, who?, repo?, since?)   // only `question` is required
+  → { answer, citations: [{ teammate, session, when, snippet }] }
+  ```
+
+  Retrieve top-k relevant chunks across the team (filtered by who/repo/since when given), rank by **relevance + recency**, inject the raw chunks (compress to a summary only if they don't fit), and synthesise a cited answer. Hero query: "why is this code/plan the way it is?"
+- **The hard part to nail: the *latest authoritative* answer.** When "the plan" evolved across several Sessions — one reversing another — `ask` must return the *current* decision, not a stale one. Relevance alone won't do it; rank with recency and prefer what supersedes. This is what the dogfood must stress-test.
+- **Strip everything else:** no Scrub, no dashboard, no SSO, no Flags, no Handoff. Three friends who trust each other don't need them; add each only when its trigger arrives (someone else's data → Scrub; enterprise → SSO).
+- **Milestone: retention, not revenue** — do your own teammates reach for it unprompted in week 3?
+
+## v1 — first teams beyond your own (later)
+
+- Capture → Scrub → store/index for a small team, across tools.
+- Lead View: **Ask-why** / the re-explaining loop. Handoff, Standups, Flags stay deferred.
+- **Defer all enterprise plumbing** (SSO, compliance, self-host, the visibility/chilling-effect apparatus) until the loop is proven and you're moving up-market.
 
 ---
 
 ## De-risk before building
 
-Prototype these four in order — each can cheaply confirm or kill the idea:
+The cheapest kill-test now is **dogfooding the loop**, not building infrastructure:
 
-1. **Near-live capture** — watch `~/.claude/projects/*.jsonl` (+ hooks) and stream deltas; reconstruct a live session within seconds.
-2. **Session → PR linkage** — commit-trailer injection + time/file correlation; measure match accuracy on real history.
-3. **Secret-scrubbing recall** — run gitleaks/detect-secrets over real sessions; confirm near-zero key leakage *before storing anything*.
-4. **Handoff quality** — on your *own* paused sessions, auto-generate a "continue here" context another agent can actually run with. This is the whole wedge; test it first.
+1. **Retrieval + answer quality (the wedge)** — across Codex + Claude, can `ask` find the *right, current* Session for a question and answer it usefully with a citation — including when the plan changed across sessions? If that beats just asking the person, you have something. **Test this first.**
+2. **Retention** — do your teammates keep using it past the novelty (week 3+)? The only near-term metric that matters.
+3. **Near-live capture** — tail each tool's session files (+ hooks), reconstruct a session within seconds. (Needed for Handoff later; the loop tolerates lag.)
+4. **Session → PR linkage** — commit-trailer injection + time/file correlation; measure match accuracy. Needed for Ask-why-on-a-PR; deferrable for the raw loop.
+
+Defer secret-scrubbing recall and Handoff-quality tests until you're past the dogfood and someone else's data (or an enterprise) is in play.
 
 ---
 
 ## Open technical decisions
 
-- **Data residency** — *default: cloud-first v1, but keep the data store liftable into a customer's own cloud without a rewrite.* Build true self-host only when the first enterprise demands it (and charge for it). ADR-worthy once committed.
+- **Data residency (enterprise-stage)** — cloud-first, but keep the data store liftable into a customer's own cloud without a rewrite. Build true self-host only when the first enterprise demands it (and charge for it). ADR-worthy once committed.
 - **Embedding/summarisation model** — managed API vs self-hosted (interacts with the self-host decision).
 - **Capture transport** — file-watch daemon vs hook-driven push vs both.
+- **Developer control of the shared record (enterprise-stage)** — fully automatic Capture vs a dev-approved/dev-editable record (self-report, not wiretap). The single biggest lever on the chilling effect (see [`business-spec.md`](./business-spec.md) Top risks), but it trades against near-live **Handoff**. Moot for small high-trust teams; ADR-worthy once you move up-market.
+- **Retention** — keep raw Sessions indefinitely vs bounded retention with raw-discard after N days. Also bounds free-tier COGS.
+- **Capture scope** — every Session vs only segments linked to shipped commits/PRs. Narrowing shrinks the surveilled surface but weakens Handoff on exploratory work.

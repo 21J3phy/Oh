@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: superseded by ADR 0006
 ---
 
 # Top-down org purchase, handoff-led wedge
+
+> **Superseded by [ADR 0006](./0006-pivot-small-team-re-explaining-loop.md).** We are no longer enterprise-first or handoff-led: we build for small high-trust teams, free, with the re-explaining / Ask-why loop as the wedge. Kept for the record of the original reasoning and why it was reversed. (Note the irony: this ADR rejected "Ask-why as the headline" — which is exactly what we pivoted to.)
 
 The customer is the **organization**: an eng lead buys it and turns it on for the whole team, so all sessions are captured by default — the same way a company owns its GitHub history and Slack. Among the team features, we lead with **handoff/continuity**, not ask-why (the original pain point).
 
