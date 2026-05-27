@@ -80,6 +80,22 @@ test("re-running is idempotent — no duplicates", () => {
   assert.equal(occurrences(toml, "[mcp_servers.oh]"), 1, "mcp block appended once");
 });
 
+test("re-registering from a new install path replaces the old hook (no dupes)", () => {
+  const paths = setup();
+  registerAll(NODE, "/old/place/dist/cli.js", true, paths);
+  const second = registerAll(NODE, "/new/place/dist/cli.js", true, paths);
+
+  assert.ok(
+    second.changed.some((c) => c.includes("settings.json")),
+    "the new path is registered as a change",
+  );
+  const settings = readFileSync(paths.claudeSettings, "utf8");
+  assert.ok(settings.includes("/new/place/dist/cli.js"), "new path present");
+  assert.ok(!settings.includes("/old/place/dist/cli.js"), "old path removed");
+  assert.equal(occurrences(settings, "OH_HOOK=1"), 2, "still exactly Stop + SessionEnd");
+  assert.ok(settings.includes("existing-notify.sh"), "pre-existing hook preserved");
+});
+
 test("installSkill copies the ask-why skill, idempotently", () => {
   const dir = mkdtempSync(join(tmpdir(), "oh-skill-"));
   const src = join(dir, "src", "SKILL.md");

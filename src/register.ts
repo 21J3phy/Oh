@@ -78,20 +78,42 @@ function tomlEscape(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-/** Add a command hook under config.hooks[event]; return true if it was added. */
+/**
+ * Ensure exactly our command hook is under config.hooks[event]. Drops any stale
+ * Oh hooks (e.g. one pointing at an old install path) and adds the current one.
+ * Returns true if anything changed — so re-running after moving the install
+ * corrects the path, while a no-op re-run reports no change.
+ */
 function addHookToConfig(config: any, event: string, command: string): boolean {
   config.hooks ??= {};
   config.hooks[event] ??= [];
-  const arr = config.hooks[event] as Array<{
+  const groups = config.hooks[event] as Array<{
     hooks?: Array<{ type?: string; command?: string }>;
   }>;
-  for (const group of arr) {
-    for (const h of group.hooks ?? []) {
-      if (typeof h.command === "string" && h.command.includes(HOOK_MARKER)) return false;
-    }
+  let changed = false;
+  let hasExact = false;
+  for (const group of groups) {
+    if (!Array.isArray(group.hooks)) continue;
+    const before = group.hooks.length;
+    group.hooks = group.hooks.filter((h) => {
+      if (typeof h.command === "string" && h.command.includes(HOOK_MARKER)) {
+        if (h.command === command) {
+          hasExact = true;
+          return true; // ours, already correct — keep
+        }
+        return false; // stale Oh hook (old path) — drop
+      }
+      return true; // someone else's hook — keep
+    });
+    if (group.hooks.length !== before) changed = true;
   }
-  arr.push({ hooks: [{ type: "command", command }] });
-  return true;
+  // Remove any groups our pruning left empty.
+  config.hooks[event] = groups.filter((g) => !Array.isArray(g.hooks) || g.hooks.length > 0);
+  if (!hasExact) {
+    config.hooks[event].push({ hooks: [{ type: "command", command }] });
+    changed = true;
+  }
+  return changed;
 }
 
 /** Register Claude: Stop+SessionEnd capture hooks and the `ask` MCP server. */
