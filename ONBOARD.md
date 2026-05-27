@@ -6,7 +6,7 @@ OpenAI key, run setup non-interactively, seed their history, and tell them to
 restart.
 
 **Before you send it**, fill in the one secret: replace
-`ADMIN_FILL_SUPABASE_SECRET_KEY` with the team's **rotated** `sb_secret_…` key.
+`ADMIN_FILL_SUPABASE_SECRET_KEY` with the team's `sb_secret_…` key.
 The Supabase URL and the tracked git project (`21j3phy/oh` — Oh captures **only**
 that project's sessions, for everyone) are already filled into the command below;
 change them only if your team uses a different project.
