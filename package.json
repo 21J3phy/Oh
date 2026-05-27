@@ -9,6 +9,7 @@
   "files": [
     "dist",
     "migrations",
+    "skills",
     "README.md"
   ],
   "engines": {

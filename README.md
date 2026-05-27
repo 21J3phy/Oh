@@ -72,11 +72,14 @@ oh init
 
 then shows and — with your confirmation, backing up every file first — wires
 capture + `ask` into both tools:
-- **Claude**: capture hook in `~/.claude/settings.json` (`Stop`/`SessionEnd`) +
-  the `ask` MCP server in `~/.claude.json`.
+- **Claude**: capture hook in `~/.claude/settings.json` (`Stop`/`SessionEnd`),
+  the `ask` MCP server in `~/.claude.json`, and the **`ask-why` skill** in
+  `~/.claude/skills/` — the proactive front-door so Claude reaches for `ask` on
+  its own when it hits an unexplained decision.
 - **Codex**: capture hook in `~/.codex/hooks.json` (`Stop`) + the `ask` MCP
   server in `~/.codex/config.toml`. *(Codex may ask you to trust the new hook on
-  its next run.)*
+  its next run.)* Codex uses the `ask` tool directly (its description carries the
+  same guidance the skill gives Claude).
 
 Finally, seed from your existing history and restart your tools:
 
@@ -92,8 +95,9 @@ oh backfill        # or: oh backfill --since 30d
 
 ## Daily use
 
-Just code. Capture is automatic. When you (or your agent) want the *why* behind
-something a teammate did, call the **`ask`** tool from inside Claude or Codex:
+Just code. Capture is automatic. With the `ask-why` skill installed, Claude will
+often reach for `ask` on its own when it hits an unexplained decision — and you
+can always invoke it explicitly from Claude or Codex:
 
 > "Use `ask`: why did we switch the queue from SQS to Redis?"
 

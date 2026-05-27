@@ -186,6 +186,37 @@ export function registerCodex(
   return result;
 }
 
+/**
+ * Install the `ask-why` Claude skill (the proactive front-door) into the user's
+ * skills dir. Idempotent: rewrites only when the content differs, backing up any
+ * existing file first.
+ */
+export function installSkill(
+  sourceFile: string,
+  skillsDir: string,
+  apply: boolean,
+): RegisterResult {
+  const result = emptyResult();
+  const dest = join(skillsDir, "ask-why", "SKILL.md");
+  if (!existsSync(sourceFile)) {
+    result.notes.push(`ask-why skill source not found (${sourceFile}) — skipped`);
+    return result;
+  }
+  const desired = readFileSync(sourceFile, "utf8");
+  const current = existsSync(dest) ? readFileSync(dest, "utf8") : null;
+  if (current === desired) {
+    result.skipped.push(`${dest} (ask-why skill already installed)`);
+    return result;
+  }
+  if (apply) {
+    if (current !== null) backup(dest, result);
+    mkdirSync(dirname(dest), { recursive: true });
+    writeFileSync(dest, desired);
+  }
+  result.changed.push(`${dest} (ask-why skill)`);
+  return result;
+}
+
 export function registerAll(
   node: string,
   cli: string,
