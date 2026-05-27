@@ -94,6 +94,12 @@ test("re-registering from a new install path replaces the old hook (no dupes)", 
   assert.ok(!settings.includes("/old/place/dist/cli.js"), "old path removed");
   assert.equal(occurrences(settings, "OH_HOOK=1"), 2, "still exactly Stop + SessionEnd");
   assert.ok(settings.includes("existing-notify.sh"), "pre-existing hook preserved");
+
+  const toml = readFileSync(paths.codexConfig, "utf8");
+  assert.ok(toml.includes("/new/place/dist/cli.js"), "codex mcp points to new path");
+  assert.ok(!toml.includes("/old/place/dist/cli.js"), "codex mcp old path removed");
+  assert.equal(occurrences(toml, "[mcp_servers.oh]"), 1, "codex mcp block not duplicated");
+  assert.ok(toml.includes("[mcp_servers.other]"), "existing toml block preserved");
 });
 
 test("installSkill copies the ask-why skill, idempotently", () => {
