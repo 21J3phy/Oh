@@ -130,6 +130,7 @@ or a window like `7d` / `30d`.
 | `includeThinking` | `true` | Include assistant reasoning/thinking blocks in the embedded text. |
 | `recencyHalfLifeDays` | `30` | Recency decay half-life for re-ranking. |
 | `recencyWeight` | `0.25` | Weight of recency vs. cosine similarity. |
+| `repos` | _(all)_ | Allowlist of git projects to capture, substring-matched against each session's git remote (so all worktrees/clones count). Set it (e.g. `["chadvschud"]`, or via `oh init --repos "chadvschud"`) to track only your team's repo; omit to capture everything. |
 
 ## Verify it works
 
