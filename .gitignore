@@ -7,3 +7,11 @@
 
 # Logs
 *.log
+
+# Node / TypeScript
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Local Oh state (never commit captured sessions or secrets)
+.oh/
