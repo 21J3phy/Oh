@@ -35,16 +35,20 @@ const NODE_PATH = process.execPath;
 const REPO_ROOT = dirname(dirname(CLI_PATH));
 const SKILL_SOURCE = join(REPO_ROOT, "skills", "ask-why", "SKILL.md");
 const CLAUDE_SKILLS_DIR = join(homedir(), ".claude", "skills");
+const CODEX_SKILLS_DIR = join(homedir(), ".codex", "skills");
 
-/** Run hook + MCP registration and the ask-why skill install together. */
+/** Hook + MCP registration plus the ask-why skill, installed for both agents. */
 function wire(apply: boolean) {
-  const r = registerAll(NODE_PATH, CLI_PATH, apply);
-  const s = installSkill(SKILL_SOURCE, CLAUDE_SKILLS_DIR, apply);
+  const parts = [
+    registerAll(NODE_PATH, CLI_PATH, apply),
+    installSkill(SKILL_SOURCE, CLAUDE_SKILLS_DIR, apply),
+    installSkill(SKILL_SOURCE, CODEX_SKILLS_DIR, apply),
+  ];
   return {
-    changed: [...r.changed, ...s.changed],
-    skipped: [...r.skipped, ...s.skipped],
-    backups: [...r.backups, ...s.backups],
-    notes: [...r.notes, ...s.notes],
+    changed: parts.flatMap((p) => p.changed),
+    skipped: parts.flatMap((p) => p.skipped),
+    backups: parts.flatMap((p) => p.backups),
+    notes: parts.flatMap((p) => p.notes),
   };
 }
 
@@ -66,7 +70,11 @@ function sinceMsFrom(s: string | undefined): number | null {
 const USAGE = `Oh — shared memory for AI-coding teams.
 
 Usage:
-  oh init                 Configure ~/.oh, print the DB schema, wire Claude+Codex.
+  oh init [flags]         Configure ~/.oh, write the schema, wire Claude+Codex
+                          (hooks + ask MCP server + ask-why skill). Run with no
+                          flags to be prompted, or non-interactively with:
+                          --author --supabase-url --supabase-key --openai-key --yes
+                          (and --no-wire to skip editing tool configs).
   oh migrate              (Re)write the schema SQL to paste into Supabase.
   oh backfill [--since W] Seed the store from your existing Claude+Codex sessions.
   oh status               Show config + how much is in the Team Brain.
@@ -78,57 +86,88 @@ Internal (wired by 'oh init'):
 
 W = ISO date or window like 7d / 24h / 2w.`;
 
-async function cmdInit(autoYes: boolean): Promise<void> {
+interface InitOpts {
+  author?: string;
+  supabaseUrl?: string;
+  supabaseKey?: string;
+  openaiKey?: string;
+  yes?: boolean;
+  noWire?: boolean;
+}
+
+function printInitNextSteps(): void {
+  console.log("\nNext:");
+  console.log("  1. Ensure the schema is applied once in Supabase (SQL editor → paste ~/.oh/schema.sql → Run).");
+  console.log("  2. `oh backfill` to seed the store from your existing sessions.");
+  console.log("  3. Restart Claude/Codex to load the MCP server + hooks + skill.");
+  console.log('  4. Use the `ask` tool from either: "why did we …?"');
+}
+
+async function cmdInit(opts: InitOpts): Promise<void> {
   ensureDirs();
   const existing = readPartialConfig();
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const interactive = process.stdin.isTTY === true;
 
-  console.log(`Oh setup — config is stored locally at ${CONFIG_PATH}.\n`);
-  const prompt = async (label: string, def?: string): Promise<string> => {
-    const answer = (await rl.question(`${label}${def ? ` [${def}]` : ""}: `)).trim();
-    return answer || def || "";
-  };
+  // Flags win, then existing config; prompt only for the rest, only with a TTY.
+  let author = opts.author ?? existing.author ?? "";
+  let supabaseUrl = opts.supabaseUrl ?? existing.supabaseUrl ?? "";
+  let supabaseKey = opts.supabaseKey ?? existing.supabaseKey ?? "";
+  let openaiKey = opts.openaiKey ?? existing.openaiKey ?? "";
 
-  const author = await prompt("Your name (attributed to your Sessions)", existing.author);
-  const supabaseUrl = await prompt("Supabase project URL", existing.supabaseUrl);
-  console.log("(keys below are echoed in the terminal)");
-  const supabaseKey = await prompt("Supabase service-role key", existing.supabaseKey);
-  const openaiKey = await prompt("OpenAI API key", existing.openaiKey);
+  if (interactive && (!author || !supabaseUrl || !supabaseKey || !openaiKey)) {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    console.log(`Oh setup — config is stored locally at ${CONFIG_PATH}.\n`);
+    const prompt = async (label: string, def?: string): Promise<string> =>
+      (await rl.question(`${label}${def ? ` [${def}]` : ""}: `)).trim() || def || "";
+    if (!author) author = await prompt("Your name (attributed to your Sessions)", existing.author);
+    if (!supabaseUrl) supabaseUrl = await prompt("Supabase project URL", existing.supabaseUrl);
+    if (!supabaseKey) {
+      console.log("(keys below are echoed in the terminal)");
+      supabaseKey = await prompt("Supabase secret key", existing.supabaseKey);
+    }
+    if (!openaiKey) openaiKey = await prompt("OpenAI API key", existing.openaiKey);
+    rl.close();
+  }
 
-  // Persist whatever was entered so a re-run prefills.
   saveConfig({ author, supabaseUrl, supabaseKey, openaiKey });
   const missing = Object.entries({ author, supabaseUrl, supabaseKey, openaiKey })
     .filter(([, v]) => !v)
     .map(([k]) => k);
   if (missing.length > 0) {
-    rl.close();
-    console.error(`\nMissing: ${missing.join(", ")}. Re-run \`oh init\` to finish.`);
+    console.error(
+      `Missing: ${missing.join(", ")}. Provide via flags ` +
+        "(--author / --supabase-url / --supabase-key / --openai-key) or run `oh init` in a terminal.",
+    );
     process.exitCode = 1;
     return;
   }
-  console.log(`\n✓ wrote ${CONFIG_PATH}`);
+  console.log(`✓ wrote ${CONFIG_PATH}`);
 
-  // Schema for the shared store.
   writeFileSync(SCHEMA_OUT_PATH, SCHEMA_SQL);
-  console.log(`✓ wrote schema to ${SCHEMA_OUT_PATH}`);
-  console.log("  → Run it ONCE in Supabase: Dashboard → SQL editor → paste → Run.");
+  console.log(`✓ wrote schema to ${SCHEMA_OUT_PATH} (apply once in the Supabase SQL editor)`);
 
-  // Wiring preview.
+  if (opts.noWire) {
+    console.log("Skipped wiring (--no-wire).");
+    printInitNextSteps();
+    return;
+  }
+
   const plan = wire(false);
   if (plan.changed.length > 0) {
-    console.log("\nPlanned wiring (capture hooks + the `ask` MCP server + ask-why skill):");
+    console.log("\nPlanned wiring (capture hooks + `ask` MCP server + ask-why skill, Claude & Codex):");
     for (const c of plan.changed) console.log(`  + ${c}`);
   }
   for (const s of plan.skipped) console.log(`  · ${s}`);
 
-  let apply = autoYes;
-  if (!autoYes && plan.changed.length > 0) {
+  let apply = opts.yes === true;
+  if (!apply && interactive && plan.changed.length > 0) {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
     const a = (await rl.question("\nApply this wiring? (files are backed up first) [y/N] "))
       .trim()
       .toLowerCase();
+    rl.close();
     apply = a === "y" || a === "yes";
   }
-  rl.close();
 
   if (apply && plan.changed.length > 0) {
     const res = wire(true);
@@ -140,14 +179,10 @@ async function cmdInit(autoYes: boolean): Promise<void> {
     }
     for (const n of res.notes) console.log(`note: ${n}`);
   } else if (!apply && plan.changed.length > 0) {
-    console.log("Skipped wiring — re-run `oh init` to apply it later.");
+    console.log("Skipped wiring — re-run with --yes (or `oh init` in a terminal) to apply.");
   }
 
-  console.log("\nNext:");
-  console.log("  1. Paste the schema into the Supabase SQL editor and Run (one-time).");
-  console.log("  2. `oh backfill` to seed the store from your existing sessions.");
-  console.log("  3. Restart Claude/Codex to load the MCP server + hooks.");
-  console.log('  4. Use the `ask` tool from either: "why did we …?"');
+  printInitNextSteps();
 }
 
 function cmdMigrate(): void {
@@ -248,6 +283,11 @@ async function main(): Promise<void> {
       since: { type: "string" },
       yes: { type: "boolean", short: "y" },
       help: { type: "boolean", short: "h" },
+      author: { type: "string" },
+      "supabase-url": { type: "string" },
+      "supabase-key": { type: "string" },
+      "openai-key": { type: "string" },
+      "no-wire": { type: "boolean" },
     },
   });
 
@@ -257,7 +297,14 @@ async function main(): Promise<void> {
 
   switch (cmd) {
     case "init":
-      await cmdInit(Boolean(values.yes));
+      await cmdInit({
+        author: values.author,
+        supabaseUrl: values["supabase-url"],
+        supabaseKey: values["supabase-key"],
+        openaiKey: values["openai-key"],
+        yes: Boolean(values.yes),
+        noWire: Boolean(values["no-wire"]),
+      });
       break;
     case "migrate":
       cmdMigrate();

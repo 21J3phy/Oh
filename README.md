@@ -57,11 +57,16 @@ Claude/Codex session files  ──(Stop/SessionEnd hook)──▶  oh capture
 
 ## Per-person setup (you and every teammate)
 
+> **Paste-and-go:** the fastest path is [`ONBOARD.md`](./ONBOARD.md) — a prompt a
+> teammate pastes into Claude Code or Codex that does all of the below for them
+> (the agent asks for their name + OpenAI key and runs setup). Manual steps:
+
 ```bash
 git clone <this repo> && cd oh
 npm install        # also builds (prepare script)
 npm link           # puts `oh` on your PATH
-oh init
+oh init            # prompts for the values below, or pass them as flags:
+                   #   --author --supabase-url --supabase-key --openai-key --yes
 ```
 
 `oh init` prompts for:
@@ -76,10 +81,10 @@ capture + `ask` into both tools:
   the `ask` MCP server in `~/.claude.json`, and the **`ask-why` skill** in
   `~/.claude/skills/` — the proactive front-door so Claude reaches for `ask` on
   its own when it hits an unexplained decision.
-- **Codex**: capture hook in `~/.codex/hooks.json` (`Stop`) + the `ask` MCP
-  server in `~/.codex/config.toml`. *(Codex may ask you to trust the new hook on
-  its next run.)* Codex uses the `ask` tool directly (its description carries the
-  same guidance the skill gives Claude).
+- **Codex**: capture hook in `~/.codex/hooks.json` (`Stop`), the `ask` MCP server
+  in `~/.codex/config.toml`, and the same **`ask-why` skill** in
+  `~/.codex/skills/` (Codex uses the same skill format). *(Codex may ask you to
+  trust the new hook on its next run.)*
 
 Finally, seed from your existing history and restart your tools:
 
