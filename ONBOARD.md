@@ -10,6 +10,8 @@ restart.
 - `ADMIN_FILL_SUPABASE_URL` → your project URL (default:
   `https://isyjdkayftpzzveamotf.supabase.co`)
 - `ADMIN_FILL_SUPABASE_SECRET_KEY` → the team's **rotated** `sb_secret_…` key
+- `ADMIN_FILL_GIT_PROJECT` → the git project to track (e.g. a repo name like
+  `chadvschud`). Oh captures **only** sessions from this project, for everyone.
 
 Share it over a secure channel (the prompt contains the shared secret key).
 
@@ -42,7 +44,8 @@ Do the following, adapting as needed and showing me any errors:
      --author "MY_NAME" \
      --supabase-url "ADMIN_FILL_SUPABASE_URL" \
      --supabase-key "ADMIN_FILL_SUPABASE_SECRET_KEY" \
-     --openai-key "MY_OPENAI_KEY"
+     --openai-key "MY_OPENAI_KEY" \
+     --repos "ADMIN_FILL_GIT_PROJECT"
    ```
 
    This writes `~/.oh/config.json` and wires capture hooks, the `ask` MCP server,

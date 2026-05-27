@@ -24,6 +24,14 @@ export interface Config {
   recencyHalfLifeDays: number;
   /** Weight (λ) of the recency term relative to cosine similarity in the final score. */
   recencyWeight: number;
+  /**
+   * Optional allowlist of git projects to capture. Each entry is matched as a
+   * (case-insensitive) substring of a session's normalized git remote, e.g.
+   * "chadvschud" or "github.com/21j3phy/chadvschud". When set and non-empty,
+   * only sessions whose cwd resolves to a matching remote are captured (applies
+   * to both backfill and the ongoing hook). Omit/empty = capture everything.
+   */
+  repos?: string[];
 }
 
 /** A single meaningful event parsed out of a tool's raw JSONL. */

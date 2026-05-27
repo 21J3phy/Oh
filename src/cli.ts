@@ -74,7 +74,8 @@ Usage:
                           (hooks + ask MCP server + ask-why skill). Run with no
                           flags to be prompted, or non-interactively with:
                           --author --supabase-url --supabase-key --openai-key --yes
-                          (and --no-wire to skip editing tool configs).
+                          (--no-wire skips editing tool configs; --repos "name"
+                          limits capture to one or more git projects).
   oh migrate              (Re)write the schema SQL to paste into Supabase.
   oh backfill [--since W] Seed the store from your existing Claude+Codex sessions.
   oh status               Show config + how much is in the Team Brain.
@@ -93,6 +94,7 @@ interface InitOpts {
   openaiKey?: string;
   yes?: boolean;
   noWire?: boolean;
+  repos?: string[];
 }
 
 function printInitNextSteps(): void {
@@ -129,7 +131,13 @@ async function cmdInit(opts: InitOpts): Promise<void> {
     rl.close();
   }
 
-  saveConfig({ author, supabaseUrl, supabaseKey, openaiKey });
+  saveConfig({
+    author,
+    supabaseUrl,
+    supabaseKey,
+    openaiKey,
+    ...(opts.repos && opts.repos.length > 0 ? { repos: opts.repos } : {}),
+  });
   const missing = Object.entries({ author, supabaseUrl, supabaseKey, openaiKey })
     .filter(([, v]) => !v)
     .map(([k]) => k);
@@ -261,6 +269,9 @@ async function cmdStatus(): Promise<void> {
   console.log(`model:     ${cfg.embeddingModel}`);
   console.log(`thinking:  ${cfg.includeThinking ? "included" : "excluded"}`);
   console.log(`recency:   half-life ${cfg.recencyHalfLifeDays}d, weight ${cfg.recencyWeight}`);
+  console.log(
+    `projects:  ${cfg.repos && cfg.repos.length > 0 ? cfg.repos.join(", ") : "ALL (no git-project filter)"}`,
+  );
   const tracked = existsSync(OFFSETS_DIR)
     ? readdirSync(OFFSETS_DIR).filter((f) => f.endsWith(".json")).length
     : 0;
@@ -288,6 +299,7 @@ async function main(): Promise<void> {
       "supabase-key": { type: "string" },
       "openai-key": { type: "string" },
       "no-wire": { type: "boolean" },
+      repos: { type: "string" },
     },
   });
 
@@ -304,6 +316,9 @@ async function main(): Promise<void> {
         openaiKey: values["openai-key"],
         yes: Boolean(values.yes),
         noWire: Boolean(values["no-wire"]),
+        repos: values.repos
+          ? values.repos.split(",").map((s) => s.trim()).filter(Boolean)
+          : undefined,
       });
       break;
     case "migrate":

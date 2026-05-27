@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
+import { execSync } from "node:child_process";
 import { ensureDirs, OFFSETS_DIR } from "./config.js";
 import type { Config, Exchange, ParseResult, SessionMeta, Tool } from "./types.js";
 import { parseClaude } from "./parse/claude.js";
@@ -56,6 +57,48 @@ function sessionIdFromPath(path: string, parsed: ParseResult): string {
   return parsed.sessionId ?? basename(path, ".jsonl");
 }
 
+const projectKeyCache = new Map<string, string | null>();
+
+function normalizeRemote(url: string): string {
+  return url
+    .replace(/^git@([^:]+):/, "$1/")
+    .replace(/^ssh:\/\/git@/, "")
+    .replace(/^https?:\/\//, "")
+    .replace(/\.git$/, "")
+    .toLowerCase();
+}
+
+/** Resolve a session's cwd to its normalized git remote (cached). Null if unknown. */
+export function resolveProjectKey(cwd: string | null): string | null {
+  if (!cwd) return null;
+  const hit = projectKeyCache.get(cwd);
+  if (hit !== undefined) return hit;
+  let key: string | null = null;
+  if (existsSync(cwd)) {
+    try {
+      const out = execSync("git config --get remote.origin.url", {
+        cwd,
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+        .toString()
+        .trim();
+      if (out) key = normalizeRemote(out);
+    } catch {
+      // not a git repo / no origin remote
+    }
+  }
+  projectKeyCache.set(cwd, key);
+  return key;
+}
+
+/** True if the cwd's git project is allowed by the (optional) repos allowlist. */
+export function repoAllowed(cwd: string | null, repos: string[] | undefined): boolean {
+  if (!repos || repos.length === 0) return true; // no filter = capture everything
+  const key = resolveProjectKey(cwd);
+  if (!key) return false;
+  return repos.some((r) => key.includes(r.trim().toLowerCase()));
+}
+
 export interface CaptureResult {
   sessionId: string | null;
   tool: Tool;
@@ -85,6 +128,11 @@ export async function captureFile(
   const content = readFileSync(path, "utf8");
   const parsed = tool === "claude" ? parseClaude(content) : parseCodex(content);
   const sessionId = sessionIdFromPath(path, parsed);
+
+  // Respect the git-project allowlist — skip sessions from other projects.
+  if (!repoAllowed(parsed.cwd, cfg.repos)) {
+    return { sessionId, tool, exchanges: 0, embedded: 0, skipped: true };
+  }
 
   // Cheap short-circuit: nothing changed since we last processed this file.
   const prev = loadState(sessionId);
