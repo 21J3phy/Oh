@@ -21,7 +21,7 @@ import { SCHEMA_SQL } from "./schema.js";
 import { createDb } from "./db.js";
 import { createEmbedder } from "./embed.js";
 import { captureAll, captureFile } from "./capture.js";
-import { parseSince } from "./ask.js";
+import { ask, formatAskResult, parseSince } from "./ask.js";
 import { runMcpServer } from "./mcp.js";
 import { runHook } from "./hook.js";
 import { registerAll, installSkill } from "./register.js";
@@ -78,6 +78,7 @@ Usage:
                           limits capture to one or more git projects).
   oh migrate              (Re)write the schema SQL to paste into Supabase.
   oh backfill [--since W] Seed the store from your existing Claude+Codex sessions.
+  oh ask "<question>"     Query the store from the terminal (--who --repo --since W).
   oh status               Show config + how much is in the Team Brain.
 
 Internal (wired by 'oh init'):
@@ -256,6 +257,22 @@ async function cmdCapture(opts: {
   throw new Error("capture needs --file <path> or --all");
 }
 
+async function cmdAsk(
+  question: string,
+  opts: { who?: string; repo?: string; since?: string },
+): Promise<void> {
+  if (!question.trim()) throw new Error('ask needs a question, e.g. oh ask "why did we choose X?"');
+  const cfg = loadConfig();
+  const { db, embedder } = makeClients(cfg);
+  const result = await ask(cfg, db, embedder, {
+    question,
+    who: opts.who,
+    repo: opts.repo,
+    since: opts.since,
+  });
+  console.log(formatAskResult(result));
+}
+
 async function cmdStatus(): Promise<void> {
   const cfg = loadConfig();
   let host = cfg.supabaseUrl;
@@ -300,6 +317,8 @@ async function main(): Promise<void> {
       "openai-key": { type: "string" },
       "no-wire": { type: "boolean" },
       repos: { type: "string" },
+      who: { type: "string" },
+      repo: { type: "string" },
     },
   });
 
@@ -326,6 +345,13 @@ async function main(): Promise<void> {
       break;
     case "backfill":
       await cmdBackfill(values.since);
+      break;
+    case "ask":
+      await cmdAsk(positionals.slice(1).join(" "), {
+        who: values.who,
+        repo: values.repo,
+        since: values.since,
+      });
       break;
     case "capture":
       await cmdCapture({ file: values.file, all: values.all, tool, since: values.since });
