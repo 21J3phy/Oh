@@ -78,6 +78,55 @@ function tomlEscape(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
+function buildOhTomlBlock(node: string, cli: string): string {
+  return (
+    `[mcp_servers.oh]\n` +
+    `command = "${tomlEscape(node)}"\n` +
+    `args = ["${tomlEscape(cli)}", "mcp"]\n` +
+    `startup_timeout_sec = 60\n`
+  );
+}
+
+/**
+ * Add or path-correct the [mcp_servers.oh] block in a config.toml's text,
+ * preserving the rest of the file. If the block exists but points elsewhere
+ * (e.g. an old install path), it's replaced.
+ */
+export function upsertCodexMcp(
+  text: string,
+  node: string,
+  cli: string,
+): { text: string; changed: boolean } {
+  const desired = buildOhTomlBlock(node, cli);
+  const lines = text.split("\n");
+  let start = -1;
+  let end = lines.length;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*\[mcp_servers\.oh\]\s*$/.test(lines[i]!)) {
+      start = i;
+      for (let j = i + 1; j < lines.length; j++) {
+        if (/^\s*\[/.test(lines[j]!)) {
+          end = j;
+          break;
+        }
+      }
+      break;
+    }
+  }
+  if (start === -1) {
+    const sep = text === "" || text.endsWith("\n") ? "" : "\n";
+    return { text: `${text}${sep}\n${desired}`, changed: true };
+  }
+  if (lines.slice(start, end).join("\n").includes(cli)) {
+    return { text, changed: false }; // already current
+  }
+  const rebuilt = [...lines.slice(0, start), ...lines.slice(end)]
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
+  const sep = rebuilt.endsWith("\n") ? "" : "\n";
+  return { text: `${rebuilt}${sep}\n${desired}`, changed: true };
+}
+
 /**
  * Ensure exactly our command hook is under config.hooks[event]. Drops any stale
  * Oh hooks (e.g. one pointing at an old install path) and adds the current one.
@@ -185,24 +234,20 @@ export function registerCodex(
     result.skipped.push(`${paths.codexHooks} (capture hook already present)`);
   }
 
-  // --- MCP server (config.toml, append-if-absent to preserve the file) ---
+  // --- MCP server (config.toml, add or path-correct, preserving the file) ---
   const configText = existsSync(paths.codexConfig)
     ? readFileSync(paths.codexConfig, "utf8")
     : "";
-  if (/^\s*\[mcp_servers\.oh\]/m.test(configText)) {
-    result.skipped.push(`${paths.codexConfig} ([mcp_servers.oh] already present)`);
-  } else {
-    const block =
-      `\n[mcp_servers.oh]\n` +
-      `command = "${tomlEscape(node)}"\n` +
-      `args = ["${tomlEscape(cli)}", "mcp"]\n` +
-      `startup_timeout_sec = 60\n`;
+  const upsert = upsertCodexMcp(configText, node, cli);
+  if (upsert.changed) {
     if (apply) {
       backup(paths.codexConfig, result);
       mkdirSync(dirname(paths.codexConfig), { recursive: true });
-      writeFileSync(paths.codexConfig, configText + block);
+      writeFileSync(paths.codexConfig, upsert.text);
     }
     result.changed.push(`${paths.codexConfig} ([mcp_servers.oh])`);
+  } else {
+    result.skipped.push(`${paths.codexConfig} ([mcp_servers.oh] already current)`);
   }
 
   return result;
