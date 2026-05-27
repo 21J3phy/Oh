@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { registerAll, type RegisterPaths } from "../src/register.js";
+import { registerAll, installSkill, type RegisterPaths } from "../src/register.js";
 
 const NODE = "/usr/bin/node";
 const CLI = "/opt/oh/dist/cli.js";
@@ -78,4 +78,26 @@ test("re-running is idempotent — no duplicates", () => {
   assert.equal(occurrences(settings, "OH_HOOK=1"), 2, "one Stop + one SessionEnd, no dupes");
   const toml = readFileSync(paths.codexConfig, "utf8");
   assert.equal(occurrences(toml, "[mcp_servers.oh]"), 1, "mcp block appended once");
+});
+
+test("installSkill copies the ask-why skill, idempotently", () => {
+  const dir = mkdtempSync(join(tmpdir(), "oh-skill-"));
+  const src = join(dir, "src", "SKILL.md");
+  mkdirSync(join(dir, "src"), { recursive: true });
+  writeFileSync(src, "---\nname: ask-why\n---\nbody\n");
+  const skillsDir = join(dir, "skills");
+
+  const first = installSkill(src, skillsDir, true);
+  assert.equal(first.changed.length, 1);
+  const dest = join(skillsDir, "ask-why", "SKILL.md");
+  assert.ok(existsSync(dest));
+  assert.match(readFileSync(dest, "utf8"), /name: ask-why/);
+
+  const second = installSkill(src, skillsDir, true);
+  assert.equal(second.changed.length, 0, "no change on re-run");
+  assert.equal(second.skipped.length, 1);
+
+  const missing = installSkill(join(dir, "nope.md"), skillsDir, true);
+  assert.equal(missing.changed.length, 0);
+  assert.equal(missing.notes.length, 1, "missing source is noted, not fatal");
 });

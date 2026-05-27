@@ -6,6 +6,8 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline/promises";
 import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { homedir } from "node:os";
 import {
   CONFIG_PATH,
   OFFSETS_DIR,
@@ -22,12 +24,29 @@ import { captureAll, captureFile } from "./capture.js";
 import { parseSince } from "./ask.js";
 import { runMcpServer } from "./mcp.js";
 import { runHook } from "./hook.js";
-import { registerAll } from "./register.js";
+import { registerAll, installSkill } from "./register.js";
 import { log } from "./log.js";
 import type { Config, Tool } from "./types.js";
 
 const CLI_PATH = fileURLToPath(import.meta.url);
 const NODE_PATH = process.execPath;
+// CLI_PATH is <repo>/dist/cli.js (built) or <repo>/src/cli.ts (dev); either way
+// the repo root is two levels up, and the ask-why skill ships under skills/.
+const REPO_ROOT = dirname(dirname(CLI_PATH));
+const SKILL_SOURCE = join(REPO_ROOT, "skills", "ask-why", "SKILL.md");
+const CLAUDE_SKILLS_DIR = join(homedir(), ".claude", "skills");
+
+/** Run hook + MCP registration and the ask-why skill install together. */
+function wire(apply: boolean) {
+  const r = registerAll(NODE_PATH, CLI_PATH, apply);
+  const s = installSkill(SKILL_SOURCE, CLAUDE_SKILLS_DIR, apply);
+  return {
+    changed: [...r.changed, ...s.changed],
+    skipped: [...r.skipped, ...s.skipped],
+    backups: [...r.backups, ...s.backups],
+    notes: [...r.notes, ...s.notes],
+  };
+}
 
 function asTool(v: string | undefined): Tool | undefined {
   return v === "claude" || v === "codex" ? v : undefined;
@@ -95,9 +114,9 @@ async function cmdInit(autoYes: boolean): Promise<void> {
   console.log("  → Run it ONCE in Supabase: Dashboard → SQL editor → paste → Run.");
 
   // Wiring preview.
-  const plan = registerAll(NODE_PATH, CLI_PATH, false);
+  const plan = wire(false);
   if (plan.changed.length > 0) {
-    console.log("\nPlanned wiring (capture hooks + the `ask` MCP server):");
+    console.log("\nPlanned wiring (capture hooks + the `ask` MCP server + ask-why skill):");
     for (const c of plan.changed) console.log(`  + ${c}`);
   }
   for (const s of plan.skipped) console.log(`  · ${s}`);
@@ -112,7 +131,7 @@ async function cmdInit(autoYes: boolean): Promise<void> {
   rl.close();
 
   if (apply && plan.changed.length > 0) {
-    const res = registerAll(NODE_PATH, CLI_PATH, true);
+    const res = wire(true);
     console.log("\n✓ wired:");
     for (const c of res.changed) console.log(`  + ${c}`);
     if (res.backups.length > 0) {
