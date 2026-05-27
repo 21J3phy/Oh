@@ -1,0 +1,35 @@
+{
+  "name": "oh",
+  "version": "0.0.1",
+  "description": "Oh — shared memory for AI-coding teams. v0: capture Claude + Codex sessions into a shared store and ask why a change was made.",
+  "type": "module",
+  "bin": {
+    "oh": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "migrations",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc && chmod +x dist/cli.js",
+    "prepare": "npm run build",
+    "dev": "tsx src/cli.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "openai": "^4.70.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,81 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { registerAll, type RegisterPaths } from "../src/register.js";
+
+const NODE = "/usr/bin/node";
+const CLI = "/opt/oh/dist/cli.js";
+
+function setup(): RegisterPaths {
+  const dir = mkdtempSync(join(tmpdir(), "oh-reg-"));
+  const paths: RegisterPaths = {
+    claudeSettings: join(dir, "claude-settings.json"),
+    claudeJson: join(dir, "claude.json"),
+    codexHooks: join(dir, "codex-hooks.json"),
+    codexConfig: join(dir, "codex-config.toml"),
+  };
+  // Pre-existing content that must survive the merge.
+  writeFileSync(
+    paths.claudeSettings,
+    JSON.stringify({
+      hooks: { Stop: [{ hooks: [{ type: "command", command: "existing-notify.sh" }] }] },
+    }),
+  );
+  writeFileSync(paths.claudeJson, JSON.stringify({ mcpServers: { posthog: { command: "ph" } } }));
+  writeFileSync(
+    paths.codexHooks,
+    JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: "codex-notify.sh" }] }] } }),
+  );
+  writeFileSync(paths.codexConfig, 'notify = ["x"]\n\n[mcp_servers.other]\ncommand = "y"\n');
+  return paths;
+}
+
+const occurrences = (s: string, needle: string) => s.split(needle).length - 1;
+
+test("registerAll merges into existing configs without clobbering them", () => {
+  const paths = setup();
+  const res = registerAll(NODE, CLI, true, paths);
+
+  assert.ok(res.changed.length >= 4, "all four files changed");
+  assert.ok(res.backups.length >= 4, "all four files backed up");
+
+  // Claude hooks: original survives, ours added to Stop + SessionEnd.
+  const settings = JSON.parse(readFileSync(paths.claudeSettings, "utf8"));
+  const stopCommands = settings.hooks.Stop.flatMap((g: any) => g.hooks.map((h: any) => h.command));
+  assert.ok(stopCommands.includes("existing-notify.sh"), "existing hook preserved");
+  assert.ok(stopCommands.some((c: string) => c.includes("OH_HOOK=1") && c.includes("--tool claude")));
+  assert.ok(settings.hooks.SessionEnd.length >= 1, "SessionEnd hook added");
+
+  // Claude MCP: posthog preserved, oh added.
+  const cj = JSON.parse(readFileSync(paths.claudeJson, "utf8"));
+  assert.equal(cj.mcpServers.posthog.command, "ph");
+  assert.deepEqual(cj.mcpServers.oh, { command: NODE, args: [CLI, "mcp"] });
+
+  // Codex hooks: original survives, ours added.
+  const ch = JSON.parse(readFileSync(paths.codexHooks, "utf8"));
+  const codexStop = ch.hooks.Stop.flatMap((g: any) => g.hooks.map((h: any) => h.command));
+  assert.ok(codexStop.includes("codex-notify.sh"));
+  assert.ok(codexStop.some((c: string) => c.includes("OH_HOOK=1") && c.includes("--tool codex")));
+
+  // Codex MCP: appended, existing block preserved.
+  const toml = readFileSync(paths.codexConfig, "utf8");
+  assert.ok(toml.includes("[mcp_servers.other]"), "existing toml block preserved");
+  assert.ok(toml.includes("[mcp_servers.oh]"));
+  assert.ok(toml.includes(`args = ["${CLI}", "mcp"]`));
+});
+
+test("re-running is idempotent — no duplicates", () => {
+  const paths = setup();
+  registerAll(NODE, CLI, true, paths);
+  const second = registerAll(NODE, CLI, true, paths);
+
+  assert.equal(second.changed.length, 0, "second run changes nothing");
+  assert.ok(second.skipped.length >= 4);
+
+  const settings = readFileSync(paths.claudeSettings, "utf8");
+  assert.equal(occurrences(settings, "OH_HOOK=1"), 2, "one Stop + one SessionEnd, no dupes");
+  const toml = readFileSync(paths.codexConfig, "utf8");
+  assert.equal(occurrences(toml, "[mcp_servers.oh]"), 1, "mcp block appended once");
+});
