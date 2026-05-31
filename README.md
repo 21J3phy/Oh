@@ -10,6 +10,27 @@ This is the dogfood build. See [`implementation-plan.md`](./implementation-plan.
 for the design and [ADR 0006](./docs/adr/0006-pivot-small-team-re-explaining-loop.md)
 for why the wedge is the re-explaining loop.
 
+## Get Started
+
+Joining a team that's already running Oh? **Grab two keys, paste one prompt:**
+
+**1. Get these two keys**
+- The team's **Supabase secret key** (`sb_secret_…`) — ask your team admin; they should share it via a password manager, not chat.
+- Your own **OpenAI API key** — https://platform.openai.com/api-keys.
+
+**2. Paste this prompt into Claude Code or Codex** (your agent will ask you for the keys + your name — you don't have to edit it):
+
+> Set up **"Oh"** (our team's shared AI-coding memory) on my machine, end to end. It captures our Claude/Codex sessions into a shared store so we can `ask` why code or decisions are the way they are instead of interrupting each other. Do this, showing me any errors:
+>
+> 1. Clone & build (if `~/oh` already exists, `cd ~/oh && git pull` instead): `git clone https://github.com/21J3phy/Oh.git ~/oh && cd ~/oh && npm install`
+> 2. Ask me for (a) my name, (b) my OpenAI API key, and (c) the team's Supabase secret key (`sb_secret_…` — from my team admin). Then run, substituting my answers: `node ~/oh/dist/cli.js init --yes --author "MY_NAME" --supabase-url "https://isyjdkayftpzzveamotf.supabase.co" --supabase-key "TEAM_SUPABASE_KEY" --openai-key "MY_OPENAI_KEY" --repos "21j3phy/oh"`
+> 3. Seed my history: `node ~/oh/dist/cli.js backfill`
+> 4. Tell me to fully restart Claude Code and Codex (approve the Codex hook-trust prompt). Confirm with `node ~/oh/dist/cli.js status`.
+
+**3. Restart Claude Code and Codex** when the agent finishes. Then in either tool just say *"ask why we …?"* — the `ask-why` skill nudges your agent to query the shared store.
+
+Prereq: **Node ≥ 20**. Standing up a brand-new team from scratch (no admin yet)? See [One-time project setup](#one-time-project-setup-one-person-does-this) below.
+
 ## How it works
 
 ```
