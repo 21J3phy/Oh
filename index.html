@@ -289,6 +289,56 @@
 <span class="cmt"># then restart Claude / Codex to load the MCP server + hooks</span></pre>
       </div>
     </div>
+
+    <div class="paste reveal d2">
+      <div class="paste-head">
+        <span class="eyebrow">or skip the typing</span>
+        <h3>Paste this into Claude Code or Codex — your agent does the setup.</h3>
+        <p>It asks for your name, OpenAI key, and the team's <span class="k">sb_secret_…</span> key, then wires capture&nbsp;+&nbsp;<span class="k">ask</span> into both tools and seeds your history. Get the team key from whoever set up your shared project.</p>
+      </div>
+      <div class="codeblock prompt-block">
+        <div class="cb-bar">
+          <div class="dots"><i></i><i></i><i></i></div>
+          <span class="t">paste into your agent</span>
+          <button class="copy-btn" id="copyPromptBtn" type="button">copy prompt</button>
+        </div>
+        <pre id="promptText" class="prompt-pre">Set up "Oh" (our team's shared AI-coding memory) on my machine, end to end. Oh
+captures our Claude/Codex sessions into a shared store so we can `ask` why code
+or a decision is the way it is instead of interrupting each other.
+
+Do the following, adapting as needed and showing me any errors:
+
+1. Clone &amp; build (if ~/oh already exists, `cd ~/oh &amp;&amp; git pull` instead):
+
+   git clone https://github.com/21J3phy/Oh.git ~/oh &amp;&amp; cd ~/oh &amp;&amp; npm install
+
+   npm install runs the build (a `prepare` step). Optionally `npm link` to get an
+   `oh` command on my PATH — if it fails on permissions, use `node ~/oh/dist/cli.js …`.
+
+2. Ask me for (a) my name, (b) my OpenAI API key, and (c) the team's Supabase
+   secret key (sb_secret_…). Then run init non-interactively with my answers:
+
+   node ~/oh/dist/cli.js init --yes \
+     --author "MY_NAME" \
+     --supabase-url "https://isyjdkayftpzzveamotf.supabase.co" \
+     --supabase-key "TEAM_SUPABASE_KEY" \
+     --openai-key "MY_OPENAI_KEY" \
+     --repos "21j3phy/oh"
+
+   This writes ~/.oh/config.json and wires capture hooks, the `ask` MCP server,
+   and the `ask-why` skill into both Claude Code and Codex (backing up each file first).
+
+3. Seed my existing history into the shared store:
+
+   node ~/oh/dist/cli.js backfill
+
+4. Tell me to fully restart Claude Code and Codex so they load the new MCP server,
+   hooks, and skill. (Codex may ask me to trust the new hook — approve it.)
+
+When done, confirm with `node ~/oh/dist/cli.js status` (chunk count should be &gt; 0).
+After that, in either tool I can just say "ask why we did X".</pre>
+      </div>
+    </div>
   </div>
 </section>
 
