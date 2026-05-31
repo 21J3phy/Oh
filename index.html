@@ -294,7 +294,7 @@
       <div class="paste-head">
         <span class="eyebrow">or skip the typing</span>
         <h3>Paste this into Claude Code or Codex — your agent does the setup.</h3>
-        <p>It asks for your name, OpenAI key, and the team's <span class="k">sb_secret_…</span> key, then wires capture&nbsp;+&nbsp;<span class="k">ask</span> into both tools and seeds your history. Get the team key from whoever set up your shared project.</p>
+        <p>It asks for your name, OpenAI key, and the team's Supabase URL&nbsp;+&nbsp;<span class="k">sb_secret_…</span> key, then wires capture&nbsp;+&nbsp;<span class="k">ask</span> into both tools and seeds your history. Get the team's URL and key from whoever set up your shared project.</p>
       </div>
       <div class="codeblock prompt-block">
         <div class="cb-bar">
@@ -316,11 +316,11 @@ Do the following, adapting as needed and showing me any errors:
    `oh` command on my PATH — if it fails on permissions, use `node ~/oh/dist/cli.js …`.
 
 2. Ask me for (a) my name, (b) my OpenAI API key, and (c) the team's Supabase
-   secret key (sb_secret_…). Then run init non-interactively with my answers:
+   URL and secret key (sb_secret_…). Then run init non-interactively with my answers:
 
    node ~/oh/dist/cli.js init --yes \
      --author "MY_NAME" \
-     --supabase-url "https://isyjdkayftpzzveamotf.supabase.co" \
+     --supabase-url "TEAM_SUPABASE_URL" \
      --supabase-key "TEAM_SUPABASE_KEY" \
      --openai-key "MY_OPENAI_KEY" \
      --repos "21j3phy/oh"
