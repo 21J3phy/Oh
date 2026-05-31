@@ -8,10 +8,10 @@ restart.
 **Send the prompt as-is — no editing.** It asks your teammate for their name,
 OpenAI key, *and* the team's `sb_secret_…` key, so the key never has to live in
 the chat message. Share the `sb_secret_…` key with them separately via a secure
-channel (a password manager, not Slack/iMessage). The Supabase URL and the
-tracked git project (`21j3phy/oh` — Oh captures **only** that project's
-sessions, for everyone) are pre-filled; change them only if your team uses a
-different project.
+channel (a password manager, not Slack/iMessage). Share the team's Supabase
+**URL** the same way (it's not pre-filled here). The tracked git project
+(`21j3phy/oh` — Oh captures **only** that project's sessions, for everyone) is
+pre-filled; change it only if your team uses a different project.
 
 ---
 
@@ -34,14 +34,14 @@ Do the following, adapting as needed and showing me any errors:
    `node ~/oh/dist/cli.js …` in the steps below.
 
 2. **Ask me for** (a) my name, (b) my OpenAI API key
-   (https://platform.openai.com/api-keys), and (c) the team's Supabase secret
-   key (`sb_secret_…` — I should have gotten it from my team admin). Then run
-   init non-interactively, substituting my answers:
+   (https://platform.openai.com/api-keys), and (c) the team's Supabase **URL**
+   and secret key (`sb_secret_…` — I should have gotten both from my team
+   admin). Then run init non-interactively, substituting my answers:
 
    ```bash
    node ~/oh/dist/cli.js init --yes \
      --author "MY_NAME" \
-     --supabase-url "https://isyjdkayftpzzveamotf.supabase.co" \
+     --supabase-url "TEAM_SUPABASE_URL" \
      --supabase-key "TEAM_SUPABASE_KEY" \
      --openai-key "MY_OPENAI_KEY" \
      --repos "21j3phy/oh"
