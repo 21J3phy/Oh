@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Oh — shared memory for AI-coding teams</title>
+<meta name="description" content="Oh captures the reasoning behind your team's AI-coding sessions — across Claude Code and Codex — into one shared Team Brain. When a teammate's agent needs to know why, it just asks." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="oh.css" />
+
+</head>
+<body>
+
+<!-- ============================ NAV ============================ -->
+<header class="nav" id="nav">
+  <div class="wrap nav-inner">
+    <a href="#top" class="brand">oh<span class="dot">.</span><span class="caret"></span></a>
+    <nav class="nav-links">
+      <a href="#problem">Problem</a>
+      <a href="#how">How it works</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#cross">Cross-tool</a>
+      <a href="#quick">Quick start</a>
+    </nav>
+    <div class="nav-right">
+      <a href="https://github.com/21J3phy/Oh" class="gh" aria-label="GitHub" title="GitHub">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.6 18.3 5 18.3 5c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>
+      </a>
+      <a href="#quick" class="btn btn-primary">Get started <span class="arrow">→</span></a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ============================ HERO ============================ -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <span class="eyebrow reveal">shared memory for AI-coding teams</span>
+      <h1 class="reveal d1">Stop re-explaining <span class="soft">your code.</span></h1>
+      <p class="hero-sub reveal d2">Oh quietly captures the <em>reasoning</em> behind every AI-coding session — across Claude Code and Codex — into one shared Team Brain. When a teammate's agent needs to know <em>why</em>, it just asks.</p>
+      <div class="hero-cta reveal d3">
+        <a href="#quick" class="btn btn-primary">Get started <span class="arrow">→</span></a>
+        <a href="#how" class="btn btn-ghost">How it works</a>
+      </div>
+      <div class="hero-meta reveal d4">
+        <span>Free for small teams</span>
+        <span>Claude Code + Codex</span>
+        <span>Reasoning-only, secrets scrubbed locally</span>
+      </div>
+    </div>
+
+    <div class="hero-term reveal d2">
+      <div class="term" id="heroTerm">
+        <div class="term-bar">
+          <div class="dots"><i></i><i></i><i></i></div>
+          <span class="term-title">claude code — ~/chadvschud</span>
+          <span class="term-badge"><span class="pulse"></span>oh · ask</span>
+        </div>
+        <div class="term-body" id="heroBody"></div>
+      </div>
+      <button class="replay" id="heroReplay" type="button">↻ replay</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ PROBLEM ============================ -->
+<section class="problem" id="problem">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">the problem</span>
+      <h2>The real tax isn't onboarding. It's re-explaining.</h2>
+      <p>AI writes most of the code now — but the <em>why</em> behind each change dies the second the chat closes. PRs show what changed, never why. So every decision you already made comes back as a question.</p>
+    </div>
+
+    <div class="compare">
+      <div class="card bad reveal">
+        <span class="card-label">// without oh — the loop</span>
+        <h3>You explain the same decision, again and again.</h3>
+        <div class="loop">
+          <div class="step"><span class="ic">→</span><span>A teammate opens your half-finished work and starts from zero.</span></div>
+          <div class="step"><span class="ic">→</span><span>They ping you: <span class="mono">"wait, why is this like this?"</span></span></div>
+          <div class="step"><span class="ic">→</span><span>You context-switch out of your own work to re-explain.</span></div>
+          <div class="step"><span class="ic">↺</span><span>The reasoning still isn't written down. Next week, repeat.</span></div>
+        </div>
+      </div>
+      <div class="card good reveal d1">
+        <span class="card-label">// with oh</span>
+        <h3>The reasoning is already captured. Their agent asks it.</h3>
+        <div class="loop">
+          <div class="step"><span class="ic">✓</span><span>Your sessions are captured automatically — no extra work.</span></div>
+          <div class="step"><span class="ic">✓</span><span>Their agent calls <span class="k">ask("why is this like this?")</span>.</span></div>
+          <div class="step"><span class="ic">✓</span><span>It gets ranked, cited excerpts of your actual reasoning.</span></div>
+          <div class="step"><span class="ic">✓</span><span>You never get interrupted. The answer outlives the chat.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ HOW IT WORKS ============================ -->
+<section class="how" id="how">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">how it works</span>
+      <h2>One quiet pipeline, from session to answer.</h2>
+      <p>Capture is hook-driven, not a daemon. Only reasoning is kept, secrets are scrubbed locally, and raw sessions never leave your machine.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step-card reveal">
+        <div class="glow"></div>
+        <span class="num">01</span>
+        <div class="ico">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h6"/><path d="m9 8 4 4-4 4"/><rect x="3" y="4" width="18" height="16" rx="2"/></svg>
+        </div>
+        <h3>Capture</h3>
+        <p>A <span class="k">Stop</span>/<span class="k">SessionEnd</span> hook spawns a detached <span class="k">oh capture</span> that reads only what's new. Never a daemon. Never blocks your turn.</p>
+        <span class="tag">hook-driven</span>
+      </div>
+
+      <div class="step-card reveal d1">
+        <div class="glow"></div>
+        <span class="num">02</span>
+        <div class="ico">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></svg>
+        </div>
+        <h3>Distill</h3>
+        <p>Only reasoning is kept — your prompts, the agent's explanation, and one-line tool summaries. Raw diffs and file dumps are dropped.</p>
+        <span class="tag">reasoning only</span>
+      </div>
+
+      <div class="step-card reveal d2">
+        <div class="glow"></div>
+        <span class="num">03</span>
+        <div class="ico">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+        </div>
+        <h3>Embed &amp; store</h3>
+        <p>Reasoning is embedded and upserted into a shared Supabase&nbsp;+&nbsp;pgvector store — your Team Brain. Raw sessions stay local.</p>
+        <span class="tag">supabase + pgvector</span>
+      </div>
+
+      <div class="step-card reveal d3">
+        <div class="glow"></div>
+        <span class="num">04</span>
+        <div class="ico">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M11 8v.01"/><path d="M11 11v3"/></svg>
+        </div>
+        <h3>Ask</h3>
+        <p>A teammate's agent calls <span class="k">ask(…)</span> and gets ranked, cited excerpts — similarity plus a recency boost, so reversed decisions surface the <em>current</em> answer.</p>
+        <span class="tag">ranked + cited</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ PRIVACY ============================ -->
+<section class="privacy" id="privacy">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">privacy by design</span>
+      <h2>What leaves your machine is reasoning — and only reasoning.</h2>
+    </div>
+
+    <div class="privacy-grid">
+      <div class="priv-list">
+        <div class="priv-item reveal">
+          <div class="ico">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <div>
+            <h3>Reasoning-only embedding</h3>
+            <p>Prompts, the agent's explanation, and one-line tool summaries — that's it. Raw file dumps, diffs, and tool output are never embedded.</p>
+          </div>
+        </div>
+        <div class="priv-item reveal d1">
+          <div class="ico">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <div>
+            <h3>Secrets scrubbed locally</h3>
+            <p>Keys, tokens, and credentials are masked with <span class="k">«secret»</span> before anything leaves your machine. Scrub runs at capture, not after.</p>
+          </div>
+        </div>
+        <div class="priv-item reveal d2">
+          <div class="ico">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <div>
+            <h3>Raw sessions stay local</h3>
+            <p>They already live in <span class="k">~/.claude</span> and <span class="k">~/.codex</span>. The shared store holds only the scrubbed, embedded exchanges — nothing more.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="scrub-demo reveal d1">
+        <div class="row"><span class="gut">prompt ›</span><span class="kept">deploy to staging with <span class="secret">«secret»</span></span></div>
+        <div class="row"><span class="gut">       </span><span class="tdim">SUPABASE_KEY scrubbed before embed</span></div>
+        <div class="row"><span class="gut">kept   ✓</span><span class="kept">"switched the queue to Redis Streams for sub-second fan-out"</span></div>
+        <div class="row"><span class="gut">kept   ✓</span><span class="kept">tool: edited db.ts · ran migration</span></div>
+        <div class="row"><span class="gut">drop   ✗</span><span class="strike">+ 482 lines of diff across 11 files…</span></div>
+        <div class="row"><span class="gut">drop   ✗</span><span class="strike">raw file dump: schema.sql (1.2k lines)</span></div>
+        <div class="legend">
+          <span><i style="background:var(--accent)"></i>embedded</span>
+          <span><i style="background:var(--text-faint)"></i>dropped</span>
+          <span><i style="background:var(--accent)"></i>masked locally</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ CROSS-TOOL ============================ -->
+<section class="cross" id="cross">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">one brain, every tool</span>
+      <h2>Claude Code and Codex, sharing one memory.</h2>
+      <p>Capture and <span class="k">ask</span> are wired into both tools through the same hook + MCP server. A decision made in Codex is answerable from Claude — and the other way around.</p>
+    </div>
+
+    <div class="cross-stage">
+      <div class="tabs reveal">
+        <button class="tab active" data-tab="claude" type="button"><span class="glyph">◇</span> Claude Code</button>
+        <button class="tab" data-tab="codex" type="button"><span class="glyph">▮</span> Codex</button>
+      </div>
+
+      <div class="cross-flow reveal d1">
+        <div class="term" id="crossTerm">
+          <div class="term-bar">
+            <div class="dots"><i></i><i></i><i></i></div>
+            <span class="term-title" id="crossTitle">claude code — ask</span>
+            <span class="term-badge"><span class="pulse"></span>oh · ask</span>
+          </div>
+          <div class="term-body" id="crossBody"></div>
+        </div>
+
+        <div class="brain-link">
+          <div class="wire up"></div>
+          <span class="chip">◈ Team Brain</span>
+          <div class="wire"></div>
+          <span>shared store</span>
+        </div>
+
+        <div class="term" id="crossTerm2">
+          <div class="term-bar">
+            <div class="dots"><i></i><i></i><i></i></div>
+            <span class="term-title" id="crossTitle2">codex — ask</span>
+            <span class="term-badge"><span class="pulse"></span>oh · ask</span>
+          </div>
+          <div class="term-body" id="crossBody2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ QUICKSTART ============================ -->
+<section class="quick" id="quick">
+  <div class="wrap">
+    <div class="quick-grid">
+      <div>
+        <div class="section-head reveal">
+          <span class="eyebrow">2-minute setup</span>
+          <h2>Up and running before your coffee.</h2>
+          <p>Clone, link, init, backfill. The CLI wires capture + <span class="k">ask</span> into both Claude and Codex for you — backing up every file first.</p>
+        </div>
+        <div class="quick-note reveal d1">
+          <b>One person sets up the shared Supabase project once.</b> Everyone else just runs <span class="k">oh init</span> with the shared URL + key, then restarts their tools.
+        </div>
+      </div>
+
+      <div class="codeblock reveal d1">
+        <div class="cb-bar">
+          <div class="dots"><i></i><i></i><i></i></div>
+          <span class="t">setup.sh</span>
+          <button class="copy-btn" id="copyBtn" type="button">copy</button>
+        </div>
+        <pre id="setupCode"><span class="pmpt">$</span> <span class="cmd">git clone</span> <span class="arg">&lt;this-repo&gt;</span> &amp;&amp; <span class="cmd">cd</span> oh
+<span class="pmpt">$</span> <span class="cmd">npm install</span>        <span class="cmt"># also builds (prepare)</span>
+<span class="pmpt">$</span> <span class="cmd">npm link</span>           <span class="cmt"># puts `oh` on your PATH</span>
+<span class="pmpt">$</span> <span class="cmd">oh init</span>            <span class="cmt"># name · shared Supabase · OpenAI key</span>
+<span class="pmpt">$</span> <span class="cmd">oh backfill</span>        <span class="cmt"># seed from your existing history</span>
+
+<span class="cmt"># then restart Claude / Codex to load the MCP server + hooks</span></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ FINAL CTA ============================ -->
+<section class="final">
+  <div class="wrap">
+    <div class="ohline reveal">oh<span class="dim">,</span> <span class="accent">that's why.</span></div>
+    <p class="reveal d1">Shared memory for your AI-coding team. Never re-explain a decision twice.</p>
+    <div class="hero-cta reveal d2">
+      <a href="#quick" class="btn btn-primary">Get started <span class="arrow">→</span></a>
+      <a href="https://github.com/21J3phy/Oh#readme" class="btn btn-ghost">Read the README</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============================ FOOTER ============================ -->
+<footer>
+  <div class="wrap foot-inner">
+    <a href="#top" class="brand">oh<span class="dot">.</span></a>
+    <nav class="foot-links">
+      <a href="https://github.com/21J3phy/Oh#readme">README</a>
+      <a href="https://github.com/21J3phy/Oh/tree/main/docs">Docs</a>
+      <a href="https://github.com/21J3phy/Oh">GitHub</a>
+      <a href="#how">How it works</a>
+      <a href="#privacy">Privacy</a>
+    </nav>
+    <span class="foot-meta">v0 · ask · free for small teams</span>
+  </div>
+</footer>
+
+<script src="landing.js"></script>
+</body>
+</html>
