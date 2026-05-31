@@ -5,13 +5,13 @@ and the agent sets Oh up end-to-end. The agent will ask them for their name and
 OpenAI key, run setup non-interactively, seed their history, and tell them to
 restart.
 
-**Before you send it**, fill in the one secret: replace
-`ADMIN_FILL_SUPABASE_SECRET_KEY` with the team's `sb_secret_…` key.
-The Supabase URL and the tracked git project (`21j3phy/oh` — Oh captures **only**
-that project's sessions, for everyone) are already filled into the command below;
-change them only if your team uses a different project.
-
-Share it over a secure channel (the prompt contains the shared secret key).
+**Send the prompt as-is — no editing.** It asks your teammate for their name,
+OpenAI key, *and* the team's `sb_secret_…` key, so the key never has to live in
+the chat message. Share the `sb_secret_…` key with them separately via a secure
+channel (a password manager, not Slack/iMessage). The Supabase URL and the
+tracked git project (`21j3phy/oh` — Oh captures **only** that project's
+sessions, for everyone) are pre-filled; change them only if your team uses a
+different project.
 
 ---
 
@@ -33,15 +33,16 @@ Do the following, adapting as needed and showing me any errors:
    to get an `oh` command on my PATH — if it fails on permissions, just use
    `node ~/oh/dist/cli.js …` in the steps below.
 
-2. **Ask me for** (a) my name and (b) my OpenAI API key
-   (https://platform.openai.com/api-keys). Then run init non-interactively,
-   substituting my answers:
+2. **Ask me for** (a) my name, (b) my OpenAI API key
+   (https://platform.openai.com/api-keys), and (c) the team's Supabase secret
+   key (`sb_secret_…` — I should have gotten it from my team admin). Then run
+   init non-interactively, substituting my answers:
 
    ```bash
    node ~/oh/dist/cli.js init --yes \
      --author "MY_NAME" \
      --supabase-url "https://isyjdkayftpzzveamotf.supabase.co" \
-     --supabase-key "ADMIN_FILL_SUPABASE_SECRET_KEY" \
+     --supabase-key "TEAM_SUPABASE_KEY" \
      --openai-key "MY_OPENAI_KEY" \
      --repos "21j3phy/oh"
    ```
