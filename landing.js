@@ -349,30 +349,45 @@
     playCross("claude");
   }
 
-  /* ---------- copy button ---------- */
-  const copyBtn = document.getElementById("copyBtn");
-  copyBtn.addEventListener("click", () => {
-    const text = [
-      "git clone <this-repo> && cd oh",
-      "npm install",
-      "npm link",
-      "oh init",
-      "oh backfill",
-    ].join("\n");
-    navigator.clipboard.writeText(text).then(
-      () => {
-        copyBtn.textContent = "copied ✓";
-        copyBtn.classList.add("done");
-        setTimeout(() => {
-          copyBtn.textContent = "copy";
-          copyBtn.classList.remove("done");
-        }, 1600);
-      },
-      () => {
-        copyBtn.textContent = "press ⌘C";
-      }
-    );
-  });
+  /* ---------- copy buttons ---------- */
+  function wireCopy(btn, getText, label) {
+    if (!btn) return;
+    btn.addEventListener("click", () => {
+      navigator.clipboard.writeText(getText()).then(
+        () => {
+          btn.textContent = "copied ✓";
+          btn.classList.add("done");
+          setTimeout(() => {
+            btn.textContent = label;
+            btn.classList.remove("done");
+          }, 1600);
+        },
+        () => {
+          btn.textContent = "press ⌘C";
+        }
+      );
+    });
+  }
+
+  wireCopy(
+    document.getElementById("copyBtn"),
+    () =>
+      [
+        "git clone <this-repo> && cd oh",
+        "npm install",
+        "npm link",
+        "oh init",
+        "oh backfill",
+      ].join("\n"),
+    "copy"
+  );
+
+  const promptEl = document.getElementById("promptText");
+  wireCopy(
+    document.getElementById("copyPromptBtn"),
+    () => (promptEl ? promptEl.innerText : ""),
+    "copy prompt"
+  );
 
   /* ---------- kick off reveal/trigger scanning ---------- */
   window.addEventListener("scroll", scanReveals, { passive: true });

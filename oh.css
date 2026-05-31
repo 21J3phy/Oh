@@ -717,6 +717,45 @@ header.nav.scrolled {
 .codeblock .cmd { color: var(--text); }
 .codeblock .arg { color: var(--blue); }
 
+/* paste-into-your-agent prompt */
+.paste {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  gap: 48px;
+  align-items: start;
+}
+@media (max-width: 900px) { .paste { grid-template-columns: 1fr; gap: 28px; } }
+.paste-head h3 {
+  font-size: 1.3rem;
+  margin: 16px 0 0;
+  text-wrap: balance;
+}
+.paste-head p {
+  color: var(--text-muted);
+  font-size: 0.98rem;
+  margin-top: 12px;
+  max-width: 380px;
+  text-wrap: pretty;
+}
+.prompt-block .prompt-pre {
+  margin: 0;
+  padding: 18px 20px 20px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.7;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 420px;
+  overflow-y: auto;
+}
+.prompt-block .prompt-pre::-webkit-scrollbar { width: 8px; }
+.prompt-block .prompt-pre::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 8px;
+}
+
 /* ============================================================
    FINAL CTA + FOOTER
    ============================================================ */
