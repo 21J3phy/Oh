@@ -29,7 +29,7 @@ go-to-market wedge is the re-explaining loop.
 
 ## Get Started
 
-Oh is in **open beta** — installable by anyone from npm (`oh-brain`; the CLI is `oh`), free, bring-your-own-keys.
+Oh is in **open beta** — installable by anyone from npm (`oh-brain`; the CLI is `oh`), free, bring-your-own-keys. Source-available under the [Elastic License 2.0](./LICENSE): use it, modify it, self-host it for your team — just don't resell it as a hosted service.
 
 **Solo or new team (the beta path):**
 
