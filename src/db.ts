@@ -55,12 +55,29 @@ export function chunkId(sessionId: string, exchangeIndex: number): string {
   return `${sessionId}:${exchangeIndex}`;
 }
 
+/** One logged ask — an answered ask is a deflected interruption (ADR 0008). */
+export interface AskLogEntry {
+  author: string;
+  question: string;
+  repoFilter: string | null;
+  whoFilter: string | null;
+  hits: number;
+  topSimilarity: number | null;
+}
+
+export interface AskStats {
+  total: number;
+  answered: number;
+}
+
 export interface Db {
   raw: SupabaseClient;
   upsertSession(s: SessionMeta): Promise<void>;
   upsertChunks(exchanges: Exchange[], embeddings: number[][]): Promise<void>;
   upsertMetrics(exchanges: Exchange[]): Promise<void>;
   fetchMetrics(filters: MatchFilters): Promise<MetricsRow[]>;
+  logAsk(entry: AskLogEntry): Promise<void>;
+  askStats(sinceIso: string): Promise<AskStats>;
   matchChunks(
     embedding: number[],
     matchCount: number,
@@ -169,6 +186,30 @@ export function createDb(cfg: Config): Db {
         out.push(...rows);
         if (rows.length < PAGE) return out;
       }
+    },
+
+    async logAsk(entry: AskLogEntry): Promise<void> {
+      const { error } = await sb.from("asks").insert({
+        id: crypto.randomUUID(),
+        author: entry.author,
+        question: entry.question,
+        repo_filter: entry.repoFilter,
+        who_filter: entry.whoFilter,
+        hits: entry.hits,
+        top_similarity: entry.topSimilarity,
+        ts: new Date().toISOString(),
+      });
+      if (error) throw new Error(`logAsk failed: ${error.message}`);
+    },
+
+    async askStats(sinceIso: string): Promise<AskStats> {
+      const [total, answered] = await Promise.all([
+        sb.from("asks").select("id", { count: "exact", head: true }).gte("ts", sinceIso),
+        sb.from("asks").select("id", { count: "exact", head: true }).gte("ts", sinceIso).gt("hits", 0),
+      ]);
+      if (total.error) throw new Error(`askStats failed: ${total.error.message}`);
+      if (answered.error) throw new Error(`askStats failed: ${answered.error.message}`);
+      return { total: total.count ?? 0, answered: answered.count ?? 0 };
     },
 
     async matchChunks(

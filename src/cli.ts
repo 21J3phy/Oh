@@ -314,6 +314,15 @@ async function cmdStatus(): Promise<void> {
   try {
     const { db } = makeClients(cfg);
     console.log(`team brain: ${await db.chunkCount()} chunks`);
+    try {
+      const week = new Date(Date.now() - 7 * 86_400_000).toISOString();
+      const s = await db.askStats(week);
+      console.log(
+        `asks (7d):  ${s.total} asked, ${s.answered} answered — ${s.answered} interruption${s.answered === 1 ? "" : "s"} deflected`,
+      );
+    } catch {
+      console.log("asks (7d):  unavailable (apply migrations/0003_asks.sql once)");
+    }
   } catch (err) {
     console.error(`team brain: unavailable — ${(err as Error).message}`);
   }

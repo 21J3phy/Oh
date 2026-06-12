@@ -123,4 +123,4 @@ Per [ADR 0007](./docs/adr/0007-insights-from-capture-metrics.md): the raw sessio
 
 ## Deferred (v0.2+ candidates, in order)
 
-Weekly digest (cron over `oh insights`); duplicate-effort detection (cross-author embedding proximity within a time window — needs false-positive tuning); ask-deflection counts; `insights` MCP tool; Codex nudge delivery; session-end one-liner.
+Weekly digest (cron over `oh insights`); duplicate-effort detection (cross-author embedding proximity within a time window — needs false-positive tuning); `insights` MCP tool; Codex nudge delivery; session-end one-liner. *(Ask-deflection counts shipped early — `asks` table + `oh status`, per [ADR 0008](./docs/adr/0008-insights-wallet-opener-individual-only.md) / [`startup-plan.md`](./startup-plan.md) Phase 0.)*
