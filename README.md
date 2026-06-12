@@ -1,5 +1,7 @@
 # Oh — the memory layer for AI-coding teams
 
+> **Landing page:** https://oh-landing-mu.vercel.app · source in [`site/`](./site/), deploy with `cd site && vercel deploy --prod`.
+
 Your team's AI sessions hold all the reasoning behind your code — and today
 that memory dies when each session ends. Oh keeps it: every **Session** across
 **Claude Code** and **Codex** is captured into a shared, secret-scrubbed store
@@ -22,7 +24,11 @@ go-to-market wedge is the re-explaining loop.
 
 ## Get Started
 
-Joining a team that's already running Oh? **Grab two keys, paste one prompt:**
+Joining a team that's already running Oh? **Get access, grab two keys, paste one prompt:**
+
+**0. Get repo access** — the repo is private; ask your team admin to add you as
+a collaborator on `21J3phy/Oh`, and make sure `gh auth login` (or your git
+credentials) works on your machine.
 
 **1. Get these two keys**
 - The team's **Supabase secret key** (`sb_secret_…`) — ask your team admin; they should share it via a password manager, not chat.
