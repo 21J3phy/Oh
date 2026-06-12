@@ -39,6 +39,7 @@
     }
     if (!heroPlayed && (reduceMotion || inView(document.getElementById("heroTerm"), 100))) playHero();
     if (!crossPlayed && (reduceMotion || inView(document.getElementById("crossTerm"), 100))) playCrossOnce();
+    if (!insPlayed && (reduceMotion || inView(document.getElementById("insTerm"), 100))) playInsOnce();
   }
 
   /* ============================================================
@@ -348,6 +349,53 @@
     crossPlayed = true;
     playCross("claude");
   }
+
+  /* ============================================================
+     INSIGHTS terminal — real `oh insights` shape; the point the
+     animation lands on is the visibility line at the end.
+     ============================================================ */
+  function insightsScript() {
+    return [
+      { t: "prompt", text: "oh insights" },
+      { t: "line", cls: "tmuted", html: 'your vibecoding · last 7 days <span class="tdim">· computed from sessions Oh already captured</span>', delay: 420 },
+      { t: "line", cls: "tdim", html: "sessions 10 · exchanges 48", delay: 140 },
+      { t: "pause", delay: 260 },
+      { t: "line", html: '<span class="taccent">time at the wheel</span><span class="tdim"> ·</span> ~6h 12m', delay: 200 },
+      { t: "line", cls: "tmuted", html: '  you prompting / thinking&nbsp;&nbsp;&nbsp;55m&nbsp;&nbsp;<span class="bar">▮▮</span><span class="bar dim">▮▮▮▮▮▮▮▮▮▮</span>', delay: 150 },
+      { t: "line", cls: "tmuted", html: '  agent working&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;4h 35m&nbsp;&nbsp;<span class="bar">▮▮▮▮▮▮▮▮▮</span><span class="bar dim">▮▮▮</span>', delay: 150 },
+      { t: "line", cls: "tmuted", html: '  you away (agent waited)&nbsp;&nbsp;41m&nbsp;&nbsp;<span class="bar">▮</span><span class="bar dim">▮▮▮▮▮▮▮▮▮▮▮</span>', delay: 150 },
+      { t: "pause", delay: 280 },
+      { t: "line", html: '<span class="taccent">tokens</span><span class="tdim"> ·</span> 5.1M fresh + 81.8M cache reads <span class="tdim">·</span> <span class="tblue">cache hit 95%</span>', delay: 200 },
+      { t: "line", cls: "tmuted", html: '  most expensive exchange&nbsp;&nbsp;<span class="tamber">569k fresh tokens</span>', delay: 150 },
+      { t: "pause", delay: 260 },
+      { t: "line", html: '<span class="taccent">friction</span><span class="tdim"> ·</span> 2 corrections · 10 tool errors · <span class="taccent">0 rabbit-hole episodes</span>', delay: 200 },
+      { t: "line", html: '<span class="taccent">fun</span><span class="tdim"> ·</span> peak hour 18:00 · longest session 1h 58m', delay: 170 },
+      { t: "pause", delay: 420 },
+      {
+        t: "line",
+        delay: 320,
+        html:
+          '<span class="answer"><span class="lbl">▌ visible to</span>' +
+          '<b>you — and nobody else.</b> No <span class="k">--who</span>, no team tables, no manager roll-ups. ' +
+          '<span class="tdim">Your team only ever sees what Oh deflected, never how you work.</span></span>',
+      },
+    ];
+  }
+
+  const insBody = document.getElementById("insBody");
+  const insPlayer = makePlayer(insBody);
+
+  let insPlayed = false;
+  function playInsOnce() {
+    if (insPlayed) return;
+    insPlayed = true;
+    insPlayer.play(insightsScript());
+  }
+
+  document.getElementById("insReplay").addEventListener("click", () => {
+    insPlayed = true;
+    insPlayer.play(insightsScript());
+  });
 
   /* ---------- copy buttons ---------- */
   function wireCopy(btn, getText, label) {
