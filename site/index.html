@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oh — supercharge your AI with memory</title>
-<meta name="description" content="The verbatim memory layer for AI coding. Every Claude Code and Codex session becomes memory your agent can recall — exact quotes, code blocks, full reasoning. Yours to recall, your team's to ask, your week to see.">
+<title>Oh — give your AI a past</title>
+<meta name="description" content="Your AI starts every session from zero. Oh keeps the verbatim record of every Claude Code and Codex session — exact quotes, code blocks, full reasoning — and gives it back to your agent. Open beta, free.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@300;400;500;700;800&family=Newsreader:ital,opsz,wght@1,6..72,300;1,6..72,400;1,6..72,500&family=Spline+Sans+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
@@ -225,6 +225,16 @@
   .truth { margin-top: 34px; display: flex; flex-wrap: wrap; gap: 10px 26px; font-size: 12px; color: var(--bone-faint); }
   .truth span::before { content: "▸ "; color: var(--phos-soft); }
 
+  /* ---- install ---- */
+  .install {
+    margin-top: 44px; border: 1px solid var(--phos-soft); background: var(--ink-2);
+    padding: 26px 26px 28px; font-size: 14px; line-height: 2.1;
+    box-shadow: 0 0 50px rgba(245,181,74,0.07), inset 0 0 60px rgba(245,181,74,0.03);
+  }
+  .install-step { white-space: pre-wrap; word-break: break-word; }
+  .install-step .ic { color: var(--phos); margin-right: 10px; }
+  .install-step .t-dim { font-size: 12px; }
+
   /* ---- pricing ---- */
   .tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 52px; align-items: stretch; }
   @media (max-width: 820px) { .tiers { grid-template-columns: 1fr; } }
@@ -277,16 +287,17 @@
       <a href="#why">why</a>
       <a href="#offerings">what</a>
       <a href="#how">how</a>
+      <a href="#get">get the beta</a>
       <a href="#pricing">pricing</a>
     </nav>
   </header>
 
   <div class="hero">
     <div class="sigil">Oh<span class="dot">.</span></div>
-    <p class="sub">Supercharge your AI <em>with memory.</em></p>
-    <p class="lede">Every session your agents have ever had — Claude Code, Codex — becomes memory they can actually use. Not the lossy summaries built into your tools: the <strong style="color:var(--bone)">verbatim record</strong> — exact quotes, code blocks, the full reasoning thread, cited. Yours to recall. Your team's to ask. Your week to see.</p>
+    <p class="sub">Every session, your AI starts from zero. <em>Oh gives it a past.</em></p>
+    <p class="lede">Not RAG over your wiki. Not the three-bullet "memory" your tools keep. Oh holds the <strong style="color:var(--bone)">verbatim record</strong> of every session your agents have ever had — Claude Code, Codex — exact quotes, code blocks, the full reasoning thread, cited. Yours to recall. Your team's to ask. Your week to see.</p>
     <div class="cta-row">
-      <a class="btn" href="mailto:niravsurabhi@gmail.com?subject=Oh%20waitlist&body=Team%20name%2C%20size%2C%20and%20which%20AI%20coding%20tools%20you%20use%3A">Join the waitlist</a>
+      <a class="btn" href="#get">Install the beta — it's free</a>
       <a class="btn ghost" href="#how">How it works ↓</a>
     </div>
 
@@ -385,6 +396,19 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
     </div>
   </section>
 
+  <section id="get">
+    <div class="kicker reveal">Open beta</div>
+    <h2 class="reveal">Four commands. <em>Then it just remembers.</em></h2>
+    <p class="prose reveal">The beta is <strong>free</strong> and bring-your-own-keys: a free Supabase project (your memory lives in <em>your</em> database, not ours) and an OpenAI API key for embeddings (pennies). Hosted Oh — no keys, no setup — is what comes next.</p>
+    <div class="install reveal">
+      <div class="install-step"><span class="ic">$</span> npm install -g oh-brain</div>
+      <div class="install-step"><span class="ic">$</span> oh migrate <span class="t-dim"># paste ~/.oh/schema.sql into your (free) Supabase project's SQL editor, once</span></div>
+      <div class="install-step"><span class="ic">$</span> oh init <span class="t-dim"># your name + Supabase URL/secret key + OpenAI key; wires Claude Code &amp; Codex</span></div>
+      <div class="install-step"><span class="ic">$</span> oh backfill <span class="t-dim"># give it your past — seeds memory from your existing sessions</span></div>
+    </div>
+    <p class="prose reveal" style="font-size:13px; margin-top:18px">Restart Claude Code and Codex, then try it: <em style="font-family:var(--serif); color:var(--phos)">"ask what I was working on last week"</em>. <strong>Teams:</strong> everyone runs the same four commands against one shared Supabase project — that's the whole team brain. Stuck? <a href="mailto:niravsurabhi@gmail.com?subject=Oh%20beta%20help" style="color:var(--cite)">email us</a>, a human answers.</p>
+  </section>
+
   <section id="pricing">
     <div class="kicker reveal">Pricing</div>
     <h2 class="reveal">Free to remember. <em>Pay to never forget.</em></h2>
@@ -399,7 +423,7 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
           <li>Cross-tool capture (Claude + Codex)</li>
           <li>Secret scrubbing</li>
         </ul>
-        <a class="btn ghost" href="mailto:niravsurabhi@gmail.com?subject=Oh%20waitlist%20(free)&body=Team%20name%2C%20size%2C%20and%20which%20AI%20coding%20tools%20you%20use%3A">Join the waitlist</a>
+        <a class="btn ghost" href="#get">Install now — open beta</a>
       </div>
       <div class="tier hot reveal">
         <h3>Team</h3>
@@ -411,7 +435,7 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
           <li>Everything in Free</li>
           <li>Priority support</li>
         </ul>
-        <a class="btn" href="mailto:niravsurabhi@gmail.com?subject=Oh%20waitlist%20(team)&body=Team%20name%2C%20size%2C%20and%20which%20AI%20coding%20tools%20you%20use%3A">Join the waitlist</a>
+        <a class="btn" href="mailto:niravsurabhi@gmail.com?subject=Hosted%20Oh%20(team%20tier)&body=Team%20name%20and%20size%3A">Arrives with hosted Oh — get notified</a>
       </div>
       <div class="tier reveal">
         <h3>Enterprise</h3>
@@ -425,16 +449,16 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
         <a class="btn ghost" href="mailto:niravsurabhi@gmail.com?subject=Oh%20enterprise">Talk to us</a>
       </div>
     </div>
-    <p class="pricing-note reveal">The cap is <em>memory, not features</em> — on Free, everything works and then ages out after 30 days. The day an answer you needed has expired, you'll know exactly what you're paying for.</p>
+    <p class="pricing-note reveal"><strong style="color:var(--phos)">During the open beta everything is free</strong> (bring your own keys — your Supabase, your OpenAI). Paid tiers arrive with hosted Oh. The cap will be <em>memory, not features</em> — everything works on Free and ages out after 30 days. The day an answer you needed has expired, you'll know exactly what you're paying for.</p>
   </section>
 
   <div class="outro">
     <p class="big reveal">Six months from now, someone will look at your code and ask <b>why</b>.<br>Oh will know.</p>
     <div class="cta-row" style="margin-top:40px">
-      <a class="btn" href="mailto:niravsurabhi@gmail.com?subject=Oh%20waitlist&body=Team%20name%2C%20size%2C%20and%20which%20AI%20coding%20tools%20you%20use%3A">Join the waitlist</a>
+      <a class="btn" href="#get">Install the beta — it's free</a>
     </div>
     <footer>
-      <span>Oh — memory that outlives the session.</span>
+      <span>Oh — give your AI a past.</span>
       <span>theirs summarizes, Oh remembers · ask their agent, not them</span>
     </footer>
   </div>
