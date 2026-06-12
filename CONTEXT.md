@@ -1,6 +1,6 @@
 # Oh — The Memory Layer for AI-Coding Teams
 
-Oh keeps the memory of a team's AI-coding sessions — persistent across sessions, tools, and people — and builds useful things on it (one Engine, many Views; ADR 0001). Two Views are live: **Ask-why** (a teammate's agent answers *why* something was done, instead of interrupting the author to re-explain) and **Insights** (what your own memory says about your vibecoding — individual-only).
+Oh keeps the **verbatim** memory of a team's AI-coding sessions — exact quotes, code blocks, full reasoning, not the lossy summaries native agent-memory keeps — persistent across sessions, tools, and people, and builds useful things on it (one Engine, many Views; ADR 0001). The headline promise is **supercharge your AI with memory**, useful at team-of-one (ADR 0009). Three Views are live: **Recall** (your own agent answers from every past session, across tools), **Ask-why** (a teammate's agent answers *why* something was done, instead of interrupting the author to re-explain), and **Insights** (what your own memory says about your vibecoding — individual-only).
 
 ## Language
 
