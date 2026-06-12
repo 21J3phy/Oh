@@ -2,17 +2,22 @@
 
 > **Landing page:** https://oh-landing-mu.vercel.app · source in [`site/`](./site/), deploy with `cd site && vercel deploy --prod`.
 
-Your team's AI sessions hold all the reasoning behind your code — and today
-that memory dies when each session ends. Oh keeps it: every **Session** across
-**Claude Code** and **Codex** is captured into a shared, secret-scrubbed store
-(the **Team Brain**) that outlives the session, the tool, and even the person.
+**Supercharge your AI with memory.** Every session across **Claude Code** and
+**Codex** is captured into a secret-scrubbed store (the **Team Brain**) that
+outlives the session, the tool, and even the person. And unlike the "memory"
+built into Claude/Codex/Gemini — lossy summaries like *"user prefers pnpm"* —
+Oh keeps the **verbatim record**: exact quotes, actual code blocks, the full
+reasoning thread, cited to the moment it happened. *Theirs summarizes; Oh
+remembers.*
 
-On top of that memory, Oh does useful things. **Two are live:**
+On top of that memory, Oh does useful things. **Three are live:**
 
-1. **Shared memory (`ask`)** — a teammate's agent answers *"why is this
-   code/plan the way it is?"* with citations from your Sessions, **instead of
-   interrupting you to re-explain**.
-2. **Insights** — your vibecoding, measured from your own memory: time anatomy
+1. **Recall (`ask`)** — your own agent answers from every session it's ever
+   had with you, across tools. Useful solo, from day one.
+2. **Shared memory (`ask`, team-wide)** — a teammate's agent answers *"why is
+   this code/plan the way it is?"* with citations from your Sessions,
+   **instead of interrupting you to re-explain**.
+3. **Insights** — your vibecoding, measured from your own memory: time anatomy
    (you prompting vs the agent working vs you away), token economy, rabbit-hole
    detection, a daily brief, and an in-session nudge. Visible **only to you**.
 

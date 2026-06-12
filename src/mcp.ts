@@ -12,7 +12,7 @@ import { createEmbedder } from "./embed.js";
 import { ask, formatAskResult } from "./ask.js";
 import { log } from "./log.js";
 
-const ASK_DESCRIPTION = `Query the team's shared memory (Oh) — past AI-coding Sessions across Claude and Codex — to answer "why is this code/plan the way it is?" without interrupting the author. Returns ranked, cited excerpts of teammates' (and your own) reasoning.
+const ASK_DESCRIPTION = `Query Oh — the verbatim memory of all past AI-coding Sessions, the user's own AND their teammates', across Claude and Codex. Unlike summarized agent memory, it returns the exact original reasoning: ranked, cited excerpts with quotes and code. Use it (a) to recall the user's own earlier work — "what was my plan for X?", "how did I fix Y last time?" — and (b) to answer "why is this code/plan the way it is?" without interrupting the author.
 
 How to use the results:
 - Answer ONLY from the returned excerpts. Do not invent reasons that aren't there.
@@ -20,7 +20,7 @@ How to use the results:
 - ALWAYS cite who + session + when for each claim you make.
 - If results are empty or weak, say "no relevant context found" rather than guessing.
 
-Use this instead of asking a teammate to re-explain. Optional filters narrow the search: who (a teammate's name), repo (working-dir basename), since (ISO date or a window like "7d"/"30d").`;
+Use this instead of re-deriving context or asking a teammate to re-explain. Optional filters narrow the search: who (a person's name — including the user's own, for self-recall), repo (working-dir basename), since (ISO date or a window like "7d"/"30d").`;
 
 export async function runMcpServer(): Promise<void> {
   const cfg = loadConfig();
@@ -32,7 +32,7 @@ export async function runMcpServer(): Promise<void> {
   server.registerTool(
     "ask",
     {
-      title: "Ask the team's shared memory",
+      title: "Ask Oh — verbatim memory of your and your team's sessions",
       description: ASK_DESCRIPTION,
       inputSchema: {
         question: z

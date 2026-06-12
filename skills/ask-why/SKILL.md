@@ -1,6 +1,6 @@
 ---
 name: ask-why
-description: ALWAYS consult the team's shared memory (Oh) before explaining, changing, reverting, or re-implementing code whose rationale you're not sure of — it retrieves the original reasoning from past Claude/Codex Sessions so you don't guess or interrupt a teammate. Strong triggers: you're about to edit/refactor/delete code and the "why" isn't obvious; you hit a surprising choice, workaround, hack, magic number, or "weird"-looking pattern; the user asks "why is X like this", "why did we do/choose X", "what was the thinking behind X", or "who decided X"; you're reviewing a diff/PR; you're starting in an unfamiliar part of the codebase. When unsure whether to use it, use it — it's cheap and beats re-deriving context or pinging a person. Backed by the `ask` MCP tool (server `oh`); works in Claude and Codex.
+description: ALWAYS consult Oh (the verbatim memory of the user's AND the team's past Claude/Codex Sessions) before explaining, changing, reverting, or re-implementing code whose rationale you're not sure of — it retrieves the exact original reasoning (quotes, code, citations), so you don't guess, re-derive, or interrupt anyone. Strong triggers: you're about to edit/refactor/delete code and the "why" isn't obvious; you hit a surprising choice, workaround, hack, magic number, or "weird"-looking pattern; the user refers to their own past work ("what was my plan for X", "how did I do Y last time", "continue where I left off"); the user asks "why is X like this", "why did we do/choose X", "what was the thinking behind X", or "who decided X"; you're reviewing a diff/PR; you're starting in an unfamiliar part of the codebase. When unsure whether to use it, use it — it's cheap and beats re-deriving context or pinging a person. Backed by the `ask` MCP tool (server `oh`); works in Claude and Codex.
 ---
 
 # Ask-why — the team's shared memory
@@ -18,6 +18,9 @@ code — query Oh first.
 - The user asks "why is this the way it is?", "why did we pick X over Y?", "what
   was the thinking behind X?", "who decided X?".
 - You're reviewing a teammate's diff/PR, or starting work in unfamiliar code.
+- The user refers to **their own past work**: "what was my plan for X?", "how did
+  I fix this last time?", "continue where I left off yesterday" — Oh holds their
+  Sessions too, verbatim, across Claude and Codex.
 
 When you're unsure whether it's worth a lookup, do it anyway — one `ask` is cheap
 and beats guessing or interrupting a person.
