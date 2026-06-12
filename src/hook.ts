@@ -6,6 +6,14 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, renameSync } from "node:fs";
 import { nudgePath } from "./capture.js";
+import {
+  formatBrief,
+  readBriefMarker,
+  readInsightsCache,
+  shouldShowBrief,
+  writeBriefMarker,
+} from "./brief.js";
+import { readPartialConfig } from "./config.js";
 import type { Tool } from "./types.js";
 import { log } from "./log.js";
 
@@ -62,6 +70,34 @@ function deliverNudge(tool: Tool, sessionId: string | null): void {
   }
 }
 
+/**
+ * SessionStart: show the daily brief (Insights' ambient surface — people
+ * forget to run `oh insights`). Pure local-cache read, zero network; the
+ * cache is kept warm by the detached capture after every turn.
+ */
+function deliverBrief(): void {
+  try {
+    const now = Date.now();
+    const cadence = readPartialConfig().brief ?? "daily";
+    if (!shouldShowBrief(cadence, readBriefMarker(), now)) return;
+    const cache = readInsightsCache(now);
+    if (!cache) return; // no/stale cache — silence beats wrong numbers
+    const message = formatBrief(cache);
+    if (!message) return;
+    writeBriefMarker(now); // mark before printing — never twice in a day
+    process.stdout.write(JSON.stringify({ systemMessage: message }) + "\n");
+    log("hook", "delivered session-start brief");
+  } catch (err) {
+    log("hook", `brief delivery failed — ${(err as Error).message}`, true);
+  }
+}
+
+function eventName(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const e = (payload as Record<string, unknown>)["hook_event_name"];
+  return typeof e === "string" ? e : null;
+}
+
 export async function runHook(tool: Tool, cliPath: string): Promise<void> {
   let payload: unknown = null;
   try {
@@ -69,6 +105,12 @@ export async function runHook(tool: Tool, cliPath: string): Promise<void> {
     if (raw.trim()) payload = JSON.parse(raw);
   } catch {
     // Malformed/absent payload is fine — we fall back to a sweep below.
+  }
+
+  // Session opening: brief only — nothing new to capture yet.
+  if (eventName(payload) === "SessionStart") {
+    deliverBrief();
+    process.exit(0);
   }
 
   deliverNudge(tool, findSessionId(payload));

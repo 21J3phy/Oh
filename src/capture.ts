@@ -20,6 +20,7 @@ import { parseCodex } from "./parse/codex.js";
 import { repoFromCwd, toExchanges } from "./normalize.js";
 import { scrubText } from "./scrub.js";
 import { detectRabbitHole, formatNudge } from "./insights.js";
+import { refreshInsightsCache } from "./brief.js";
 import type { Db } from "./db.js";
 import type { Embedder } from "./embed.js";
 import { log } from "./log.js";
@@ -334,5 +335,15 @@ export async function captureAll(
       log("capture", `ERROR ${tool} ${path}: ${(err as Error).message}`, true);
     }
   }
+
+  // Keep the session-start brief's local cache warm. We're the detached
+  // post-turn process, so this latency is invisible; offline just means the
+  // brief goes quiet rather than ever blocking a session.
+  try {
+    await refreshInsightsCache(cfg, db);
+  } catch (err) {
+    log("capture", `insights cache refresh skipped — ${(err as Error).message}`);
+  }
+
   return result;
 }

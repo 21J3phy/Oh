@@ -25,6 +25,11 @@ export interface Config {
   /** Weight (λ) of the recency term relative to cosine similarity in the final score. */
   recencyWeight: number;
   /**
+   * Session-start brief cadence: "daily" (default — first session of the day),
+   * "session" (every session), or "off".
+   */
+  brief?: "daily" | "session" | "off";
+  /**
    * Optional allowlist of git projects to capture. Each entry is matched as a
    * (case-insensitive) substring of a session's normalized git remote, e.g.
    * "chadvschud" or "github.com/21j3phy/chadvschud". When set and non-empty,

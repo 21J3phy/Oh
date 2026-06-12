@@ -16,6 +16,8 @@ export const OFFSETS_DIR = join(OH_DIR, "offsets");
 export const LOGS_DIR = join(OH_DIR, "logs");
 export const NUDGES_DIR = join(OH_DIR, "nudges");
 export const SCHEMA_OUT_PATH = join(OH_DIR, "schema.sql");
+export const INSIGHTS_CACHE_PATH = join(OH_DIR, "insights-cache.json");
+export const BRIEF_MARKER_PATH = join(OH_DIR, "brief-last-shown");
 
 const DEFAULTS = {
   embeddingModel: "text-embedding-3-small",
