@@ -37,7 +37,17 @@ _Avoid_: resume, takeover
 The View that reports what a person *shipped* — anchored to merged work, not chat volume. A later View.
 
 **Flag**:
-An automatic finding the Engine raises against a Session (wasted tokens, leaked secret, skipped review). A later View.
+An automatic finding the Engine raises against a Session (wasted tokens, leaked secret, skipped review). The first Flag shipped is the rabbit-hole **Nudge** (see [ADR 0007](./docs/adr/0007-insights-from-capture-metrics.md)).
+
+**Metrics**:
+The small per-Exchange row of mechanical facts (tokens, durations, tool/error/interrupt counts) the Engine keeps at Capture time, parsed from the same files Capture already reads. Never LLM-judged, never embedded.
+_Avoid_: analytics, telemetry (those imply a separate collection pipeline; Metrics are a byproduct of Capture)
+
+**Insights**:
+The View that turns Metrics into a report — time anatomy (prompting vs agent working vs away), token economy, rabbit-hole episodes, fun stats. Pull by default (`oh insights`); individual numbers default to the individual, team views show aggregates. See [ADR 0007](./docs/adr/0007-insights-from-capture-metrics.md).
+
+**Nudge**:
+The one push Insight: a one-shot, self-only, in-session note that the current Session is circling (a streak of correction/error Exchanges). Delivered by the next Stop hook; never blocks a turn; at most one per Session.
 
 **Visibility Policy**:
 The org-configured rule for who sees a Flag or Summary — the individual, the team in aggregate, or a named report to a manager. Security Flags always escalate. (Enterprise-stage; trivial for small high-trust teams.)
@@ -49,7 +59,8 @@ The team or company that owns its members' Sessions and sets the Visibility Poli
 
 - An **Org** has many members; each member produces many **Sessions**.
 - The **Engine** **Captures** then **Scrubs** every **Session** before storing it in the **Team Brain**.
-- **Views** (Ask-why, Handoff, Daily Summary, Flag) read the **Team Brain**; they never keep their own copy.
+- **Views** (Ask-why, Handoff, Daily Summary, Flag, Insights) read the **Team Brain**; they never keep their own copy.
+- **Insights** reads only **Metrics**; the **Nudge** is a **Flag** surfaced through the Capture hook.
 - A member's agent reaches a **View** through a **Skill** (the trigger) that calls an **MCP** (the engine connection).
 - **Flags** and **Daily Summaries** are exposed according to the **Org**'s **Visibility Policy**.
 

@@ -4,7 +4,7 @@
 // what we embed; raw tool output and file dumps never reach this layer.
 
 import { basename } from "node:path";
-import type { Exchange, ParsedEvent, ParseResult } from "./types.js";
+import type { Exchange, ExchangeMetrics, ParsedEvent, ParseResult } from "./types.js";
 
 export function repoFromCwd(cwd: string | null | undefined): string {
   if (!cwd) return "unknown";
@@ -55,6 +55,79 @@ function buildReasoningText(group: Group, includeThinking: boolean): {
   return { text: parts.join("\n\n"), toolSummaries };
 }
 
+/** Prompts that read as corrections of the previous turn — a rabbit-hole signal. */
+const CORRECTION_RE =
+  /^(no\b|nope\b|wait\b|stop\b|wrong\b|actually\b|that'?s not|not what i)|still (failing|broken|not working|wrong|the same)|(doesn'?t|didn'?t|does not|did not) work|same (error|issue|problem)|not fixed/i;
+
+const READ_TOOLS = new Set(["Read", "Glob", "Grep", "read_file", "list_dir", "grep"]);
+const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit", "apply_patch", "edit_file", "write_file"]);
+
+function classifyTool(name: string | undefined): "read" | "edit" | "other" {
+  if (!name) return "other";
+  if (READ_TOOLS.has(name)) return "read";
+  if (EDIT_TOOLS.has(name) || /patch|write|edit/i.test(name)) return "edit";
+  return "other";
+}
+
+function ms(ts: string): number {
+  const t = Date.parse(ts);
+  return Number.isNaN(t) ? 0 : t;
+}
+
+/** Mechanical facts about one exchange (ADR 0007). `prevEndTs` = last event of
+ *  the previous exchange, for the think-time gap. */
+function buildMetrics(group: Group, prevEndTs: string | null): ExchangeMetrics {
+  const m: ExchangeMetrics = {
+    endedAt: group.ts,
+    thinkMs: null,
+    workMs: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    toolCalls: 0,
+    fileReads: 0,
+    fileEdits: 0,
+    errors: 0,
+    interrupted: false,
+    isCorrection: false,
+    model: null,
+  };
+
+  for (const ev of group.events) {
+    if (ms(ev.ts) > ms(m.endedAt)) m.endedAt = ev.ts;
+    if (ev.model) m.model = ev.model;
+    if (ev.usage) {
+      m.inputTokens += ev.usage.input;
+      m.outputTokens += ev.usage.output;
+      m.cacheReadTokens += ev.usage.cacheRead;
+      m.cacheWriteTokens += ev.usage.cacheWrite;
+    }
+    switch (ev.kind) {
+      case "user":
+        if (ev.interrupted) m.interrupted = true;
+        else if (ev.text && CORRECTION_RE.test(ev.text)) m.isCorrection = true;
+        break;
+      case "tool_call": {
+        m.toolCalls++;
+        const cls = classifyTool(ev.toolName);
+        if (cls === "read") m.fileReads++;
+        else if (cls === "edit") m.fileEdits++;
+        break;
+      }
+      case "tool_result":
+        if (ev.isError) m.errors++;
+        break;
+      default:
+        break;
+    }
+  }
+
+  m.workMs = Math.max(0, ms(m.endedAt) - ms(group.ts));
+  if (prevEndTs) m.thinkMs = Math.max(0, ms(group.ts) - ms(prevEndTs));
+  return m;
+}
+
 /**
  * Convert a parsed session into Exchanges.
  * `sessionId` falls back to the parsed id; the caller (capture) supplies one
@@ -85,7 +158,10 @@ export function toExchanges(
 
   const exchanges: Exchange[] = [];
   let index = 0;
+  let prevEndTs: string | null = null;
   for (const group of groups) {
+    const metrics = buildMetrics(group, prevEndTs);
+    prevEndTs = metrics.endedAt; // skipped groups still anchor the next think-gap
     const { text, toolSummaries } = buildReasoningText(group, includeThinking);
     if (!text.trim()) continue; // nothing embeddable (e.g. empty prompt)
     const cwd = group.cwd || fallbackCwd;
@@ -99,6 +175,7 @@ export function toExchanges(
       ts: group.ts,
       reasoningText: text,
       toolSummaries,
+      metrics,
     });
   }
   return exchanges;

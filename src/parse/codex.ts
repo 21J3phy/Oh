@@ -62,10 +62,22 @@ function summarizeTool(name: unknown, argsRaw: unknown): string {
   return n;
 }
 
+/** function_call_output payloads embed the exit code as JSON-in-a-string. */
+function outputIsError(output: unknown): boolean {
+  if (typeof output !== "string") return false;
+  const m = output.match(/"exit_code"\s*:\s*(-?\d+)/);
+  return m != null && m[1] !== "0";
+}
+
 export function parseCodex(content: string): ParseResult {
   const events: ParsedEvent[] = [];
   let sessionId: string | null = null;
   let cwd: string | null = null;
+  let model: string | null = null;
+  // token_count events carry cumulative totals — diff them into per-event deltas.
+  // Codex's input_tokens INCLUDES cached_input_tokens; split them apart so the
+  // stored semantics match Claude's (input = uncached input).
+  let prevTotals = { input: 0, cached: 0, output: 0 };
 
   for (const line of content.split("\n")) {
     if (!line.trim()) continue;
@@ -86,9 +98,42 @@ export function parseCodex(content: string): ParseResult {
     }
     if (e.type === "turn_context") {
       if (typeof p.cwd === "string") cwd = p.cwd; // cwd can change per turn
+      if (typeof p.model === "string") model = p.model;
       continue;
     }
-    if (e.type !== "response_item") continue; // ignore event_msg (TUI mirror)
+    if (e.type === "event_msg") {
+      // Mirror events are otherwise ignored, but token_count is the only place
+      // Codex reports usage.
+      if (p.type === "token_count" && p.info && typeof p.info === "object") {
+        const t = (p.info as any).total_token_usage;
+        if (t && typeof t === "object") {
+          const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+          const cur = { input: n(t.input_tokens), cached: n(t.cached_input_tokens), output: n(t.output_tokens) };
+          const d = {
+            input: Math.max(0, cur.input - prevTotals.input),
+            cached: Math.max(0, cur.cached - prevTotals.cached),
+            output: Math.max(0, cur.output - prevTotals.output),
+          };
+          prevTotals = cur;
+          if (d.input + d.cached + d.output > 0) {
+            events.push({
+              kind: "meta",
+              ts,
+              cwd: cwd ?? undefined,
+              model: model ?? undefined,
+              usage: {
+                input: Math.max(0, d.input - d.cached),
+                output: d.output,
+                cacheRead: d.cached,
+                cacheWrite: 0,
+              },
+            });
+          }
+        }
+      }
+      continue;
+    }
+    if (e.type !== "response_item") continue;
 
     if (p.type === "message") {
       const role = p.role;
@@ -109,8 +154,10 @@ export function parseCodex(content: string): ParseResult {
         toolSummary: summarizeTool(p.name, p.arguments),
         cwd: cwd ?? undefined,
       });
+    } else if (p.type === "function_call_output") {
+      // Raw output stays dropped; the error bit is a metric.
+      events.push({ kind: "tool_result", ts, cwd: cwd ?? undefined, isError: outputIsError(p.output) });
     }
-    // function_call_output -> raw output, dropped
   }
 
   return { tool: "codex", sessionId, cwd, events };

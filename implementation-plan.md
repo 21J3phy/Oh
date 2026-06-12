@@ -82,4 +82,45 @@ Per ADR 0006, Oh pivoted to the **re-explaining loop** for small high-trust team
 
 ## Deferred / out of scope (explicit)
 
-Full Scrub engine; Handoff / Standups / Flags; web dashboard; SSO/auth/RLS; cross-machine raw drill-down; server-side answer synthesis; launchd auto-start; non-OpenAI embeddings; everything enterprise.
+Full Scrub engine; Handoff / Standups; web dashboard; SSO/auth/RLS; cross-machine raw drill-down; server-side answer synthesis; launchd auto-start; non-OpenAI embeddings; everything enterprise. *(Flags moved out of this list — the first Flag ships in v0.1 below.)*
+
+---
+
+# v0.1 — Insights & Metrics (this build)
+
+Per [ADR 0007](./docs/adr/0007-insights-from-capture-metrics.md): the raw session files Capture already reads carry per-message token `usage` + `model` (Claude, deduped by message id), cumulative `token_count` events (Codex), per-event timestamps, `is_error` tool results, and interrupt markers — all currently discarded at parse time. v0.1 keeps them as **Metrics** and ships the **Insights** View + the **rabbit-hole Nudge**. No new data source, no LLM judging, no embedding spend.
+
+## Components (delta)
+
+- `src/types.ts` — `ParsedEvent` gains optional `usage` (delta tokens), `model`, `isError`, `interrupted`; new `ExchangeMetrics` on `Exchange`.
+- `src/parse/claude.ts` — read `message.usage`/`message.model` (dedupe by `message.id` — one usage per API message, repeated across block lines); emit `tool_result` events with `isError`; tag `[Request interrupted…]` user events.
+- `src/parse/codex.ts` — diff cumulative `event_msg/token_count.info.total_token_usage` into per-event deltas; flag `function_call_output` with non-zero `exit_code` as errors.
+- `src/normalize.ts` — per Exchange compute: `thinkMs` (prev Exchange end → this prompt; null for first), `workMs` (prompt → last event), token sums, tool-call/file-read/file-edit counts, error count, `interrupted`, `isCorrection` (regex on the prompt: "no/wait/still failing/didn't work/…"), `model`.
+- `src/insights.ts` (new) — aggregation + report formatting + the streak detector (shared by `oh insights` and capture's Nudge writer).
+- `src/capture.ts` — upsert Metrics rows alongside chunks (Metrics for *all* exchanges on the first metrics-aware pass — offset state gains `metricsV`; tail-only after); run the detector and write at most one Nudge file per session under `~/.oh/nudges/`.
+- `src/hook.ts` — before spawning capture: if a pending Nudge exists for this `session_id`, print `{"systemMessage": …}` and mark it consumed. Still never blocks.
+- `src/cli.ts` — new `oh insights [--since 7d] [--who NAME | --team] [--repo R]`.
+
+## Data model (delta)
+
+- `exchange_metrics` — `id text pk` (`<session>:<index>`, same as chunks), `session_id fk`, `author`, `tool`, `repo`, `ts`, `ended_at`, `think_ms`, `work_ms`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `tool_calls`, `file_reads`, `file_edits`, `errors`, `interrupted bool`, `is_correction bool`, `model`. Btree on `(author, ts)`, `(repo, ts)`, `(session_id)`. No embedding column.
+- Shipped as `migrations/0002_exchange_metrics.sql` + folded into the canonical `SCHEMA_SQL` (idempotent — existing teams paste 0002 or just re-run `~/.oh/schema.sql`).
+
+## Decisions (settled here)
+
+1. **Metrics live in the Team Brain**, not a local store — one store, many Views (ADR 0001); team aggregates need it; token counts are far less sensitive than the reasoning text already shared.
+2. **Tokens, not dollars** — no price table to maintain/go stale.
+3. **Time anatomy thresholds** — think gap ≤ 5 min = "you prompting/thinking"; 5–30 min = "away while agent waited"; > 30 min = excluded (left for the day). Stated in the report footer.
+4. **Rabbit-hole signature** — trailing streak of ≥ 4 exchanges that are corrections or contain tool errors. Deterministic, explainable, tunable later.
+5. **Nudge delivery** — written by the detached capture, surfaced by the *next* Stop hook as `systemMessage`. One per session (consumed marker). Claude only in v0.1 (Codex hook output surface unverified).
+6. **Backfill** — `metricsV` in offset state forces one metrics-only re-sweep of already-captured sessions; embedding remains tail-only (no re-embed cost).
+
+## Verification
+
+- Parser fixtures (real-shape redacted lines) assert token sums dedupe/diff correctly, errors and interrupts counted.
+- `oh backfill` then `oh insights` on our own history — numbers eyeballed against known sessions.
+- Plant a 5-correction synthetic session → nudge file appears; second sweep does not duplicate it.
+
+## Deferred (v0.2+ candidates, in order)
+
+Weekly digest (cron over `oh insights`); duplicate-effort detection (cross-author embedding proximity within a time window — needs false-positive tuning); ask-deflection counts; `insights` MCP tool; Codex nudge delivery; session-end one-liner.

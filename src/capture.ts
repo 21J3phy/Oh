@@ -13,12 +13,13 @@ import {
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
-import { ensureDirs, OFFSETS_DIR } from "./config.js";
+import { ensureDirs, NUDGES_DIR, OFFSETS_DIR } from "./config.js";
 import type { Config, Exchange, ParseResult, SessionMeta, Tool } from "./types.js";
 import { parseClaude } from "./parse/claude.js";
 import { parseCodex } from "./parse/codex.js";
 import { repoFromCwd, toExchanges } from "./normalize.js";
 import { scrubText } from "./scrub.js";
+import { detectRabbitHole, formatNudge } from "./insights.js";
 import type { Db } from "./db.js";
 import type { Embedder } from "./embed.js";
 import { log } from "./log.js";
@@ -26,11 +27,16 @@ import { log } from "./log.js";
 export const CLAUDE_ROOT = join(homedir(), ".claude", "projects");
 export const CODEX_ROOT = join(homedir(), ".codex", "sessions");
 
+/** Bump to force a one-time metrics re-sweep of already-captured sessions. */
+const METRICS_V = 1;
+
 interface OffsetState {
   bytes: number;
   mtimeMs: number;
   processed: number; // number of exchanges already embedded
   updatedAt: string;
+  /** exchange_metrics schema version this session was last swept with. */
+  metricsV?: number;
 }
 
 function statePath(sessionId: string): string {
@@ -55,6 +61,44 @@ function saveState(sessionId: string, state: OffsetState): void {
 
 function sessionIdFromPath(path: string, parsed: ParseResult): string {
   return parsed.sessionId ?? basename(path, ".jsonl");
+}
+
+// --- Rabbit-hole Nudge (ADR 0007) -----------------------------------------
+// Capture writes at most one nudge file per session; the next Stop hook
+// surfaces it in-session and renames it to .done. Self-only, never blocks.
+
+/** Don't nudge sessions that aren't live — backfill sweeps old history. */
+const NUDGE_FRESHNESS_MS = 30 * 60_000;
+
+export function nudgePath(sessionId: string): string {
+  return join(NUDGES_DIR, `${sessionId.replace(/[^A-Za-z0-9_.-]/g, "_")}.json`);
+}
+
+function maybeWriteNudge(sessionId: string, exchanges: Exchange[]): void {
+  const last = exchanges[exchanges.length - 1];
+  if (!last) return;
+  const lastEnd = Date.parse(last.metrics.endedAt);
+  if (Number.isNaN(lastEnd) || Date.now() - lastEnd > NUDGE_FRESHNESS_MS) return;
+  const pending = nudgePath(sessionId);
+  if (existsSync(pending) || existsSync(`${pending}.done`)) return; // one per session
+  const hit = detectRabbitHole(
+    exchanges.map((ex) => ({
+      isCorrection: ex.metrics.isCorrection,
+      errors: ex.metrics.errors,
+      freshTokens: ex.metrics.inputTokens + ex.metrics.outputTokens + ex.metrics.cacheWriteTokens,
+    })),
+  );
+  if (!hit) return;
+  ensureDirs();
+  writeFileSync(
+    pending,
+    JSON.stringify({
+      sessionId,
+      message: formatNudge(hit.streak, hit.tokens),
+      createdAt: new Date().toISOString(),
+    }),
+  );
+  log("capture", `${sessionId}: rabbit-hole nudge written (streak ${hit.streak}, ~${hit.tokens} tokens)`);
 }
 
 const projectKeyCache = new Map<string, string | null>();
@@ -134,9 +178,15 @@ export async function captureFile(
     return { sessionId, tool, exchanges: 0, embedded: 0, skipped: true };
   }
 
-  // Cheap short-circuit: nothing changed since we last processed this file.
+  // Cheap short-circuit: nothing changed since we last processed this file
+  // (and its metrics are current — a METRICS_V bump forces one re-sweep).
   const prev = loadState(sessionId);
-  if (prev && prev.bytes === size && Math.abs(prev.mtimeMs - mtimeMs) < 1) {
+  if (
+    prev &&
+    prev.bytes === size &&
+    Math.abs(prev.mtimeMs - mtimeMs) < 1 &&
+    prev.metricsV === METRICS_V
+  ) {
     return { sessionId, tool, exchanges: prev.processed, embedded: 0, skipped: true };
   }
 
@@ -146,7 +196,13 @@ export async function captureFile(
     sessionId,
   });
   if (exchanges.length === 0) {
-    saveState(sessionId, { bytes: size, mtimeMs, processed: 0, updatedAt: new Date().toISOString() });
+    saveState(sessionId, {
+      bytes: size,
+      mtimeMs,
+      processed: 0,
+      updatedAt: new Date().toISOString(),
+      metricsV: METRICS_V,
+    });
     return { sessionId, tool, exchanges: 0, embedded: 0, skipped: false };
   }
 
@@ -157,8 +213,16 @@ export async function captureFile(
     .filter((ex) => ex.index >= fromIndex)
     .map((ex) => ({ ...ex, reasoningText: scrubText(ex.reasoningText) }));
 
-  if (fresh.length > 0) {
-    const embeddings = await embedder.embed(fresh.map((e) => e.reasoningText));
+  // Metrics carry no text and no embedding — tail-only normally, the whole
+  // session on the first METRICS_V-aware pass (backfills pre-v0.1 captures).
+  const metricsTargets =
+    prev?.metricsV === METRICS_V ? exchanges.filter((ex) => ex.index >= fromIndex) : exchanges;
+
+  // Metrics must never break capture — e.g. the team store predates migration
+  // 0002. On failure, keep capturing chunks and leave metricsV unset so the
+  // next sweep retries once the table exists.
+  let metricsOk = true;
+  if (fresh.length > 0 || metricsTargets.length > 0) {
     const firstExchange = exchanges[0]!;
     const lastExchange = exchanges[exchanges.length - 1]!;
     const cwd = parsed.cwd ?? firstExchange.cwd;
@@ -172,14 +236,30 @@ export async function captureFile(
       lastSeenAt: lastExchange.ts,
     };
     await db.upsertSession(meta);
-    await db.upsertChunks(fresh, embeddings);
+    if (fresh.length > 0) {
+      const embeddings = await embedder.embed(fresh.map((e) => e.reasoningText));
+      await db.upsertChunks(fresh, embeddings);
+    }
+    try {
+      await db.upsertMetrics(metricsTargets);
+    } catch (err) {
+      metricsOk = false;
+      log(
+        "capture",
+        `metrics skipped (apply migrations/0002_exchange_metrics.sql?) — ${(err as Error).message}`,
+        true,
+      );
+    }
   }
+
+  maybeWriteNudge(sessionId, exchanges);
 
   saveState(sessionId, {
     bytes: size,
     mtimeMs,
     processed: exchanges.length,
     updatedAt: new Date().toISOString(),
+    ...(metricsOk ? { metricsV: METRICS_V } : {}),
   });
 
   return {
