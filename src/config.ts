@@ -14,6 +14,7 @@ export const OH_DIR = join(homedir(), ".oh");
 export const CONFIG_PATH = join(OH_DIR, "config.json");
 export const OFFSETS_DIR = join(OH_DIR, "offsets");
 export const LOGS_DIR = join(OH_DIR, "logs");
+export const NUDGES_DIR = join(OH_DIR, "nudges");
 export const SCHEMA_OUT_PATH = join(OH_DIR, "schema.sql");
 
 const DEFAULTS = {
@@ -26,7 +27,7 @@ const DEFAULTS = {
 const REQUIRED_KEYS = ["author", "supabaseUrl", "supabaseKey", "openaiKey"] as const;
 
 export function ensureDirs(): void {
-  for (const dir of [OH_DIR, OFFSETS_DIR, LOGS_DIR]) {
+  for (const dir of [OH_DIR, OFFSETS_DIR, LOGS_DIR, NUDGES_DIR]) {
     mkdirSync(dir, { recursive: true });
   }
 }

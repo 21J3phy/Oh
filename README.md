@@ -131,6 +131,25 @@ can always invoke it explicitly from Claude or Codex:
 to a teammate, `repo` to a project (working-dir basename), `since` to an ISO date
 or a window like `7d` / `30d`.
 
+## Insights
+
+Capture also keeps a small **Metrics** row per exchange (tokens, durations,
+tool/error counts — parsed from the same files, never LLM-judged, no extra
+embedding cost). Two surfaces use it:
+
+- **`oh insights`** — your last 7 days by default: how much you vibecoded and
+  how that splits into *you prompting* vs *the agent working* vs *you away*;
+  token totals and cache-hit rate; your most expensive exchange; corrections,
+  errors, and rabbit-hole episodes; plus peak hour / longest session.
+  `--since 30d`, `--repo X`, `--who NAME`, or `--team` (per-author aggregates).
+- **The rabbit-hole nudge** — if a session shows 4+ consecutive
+  correction/error turns, the next turn ends with a one-line note ("9 turns
+  circling, ~80k tokens — a fresh start is often cheaper"). At most once per
+  session, visible only to you.
+
+Your numbers default to you; team views are aggregates
+(see [ADR 0007](./docs/adr/0007-insights-from-capture-metrics.md)).
+
 ## Commands
 
 | Command | What it does |
@@ -138,6 +157,7 @@ or a window like `7d` / `30d`.
 | `oh init` | Configure, print schema, wire Claude + Codex. |
 | `oh migrate` | (Re)write `~/.oh/schema.sql` to paste into Supabase. |
 | `oh backfill [--since W]` | Seed the store from existing sessions. |
+| `oh insights [--since W] [--who N \| --team] [--repo R]` | Time/token/friction report from your captured sessions. |
 | `oh status` | Show config + chunk count in the Team Brain. |
 | `oh capture --file F --tool T` · `oh capture --all` | Internal (wired by hooks). |
 | `oh mcp` | Internal — the stdio MCP server. |
@@ -168,7 +188,8 @@ or a window like `7d` / `30d`.
 
 ## Not in v0 (deferred)
 
-Full Scrub engine; Handoff / Standups / Flags; web dashboard; SSO/auth/RLS;
+Full Scrub engine; Handoff / Standups; weekly digest + duplicate-effort
+detection (the next Insights); web dashboard; SSO/auth/RLS;
 cross-machine raw drill-down; server-side answer synthesis. The shared
 service-role key (no per-user auth) is the accepted tradeoff for a few trusted
 people — real auth arrives when a non-friend team joins.

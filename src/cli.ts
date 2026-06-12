@@ -22,6 +22,12 @@ import { createDb } from "./db.js";
 import { createEmbedder } from "./embed.js";
 import { captureAll, captureFile } from "./capture.js";
 import { ask, formatAskResult, parseSince } from "./ask.js";
+import {
+  computeInsights,
+  computeTeamInsights,
+  formatInsights,
+  formatTeamInsights,
+} from "./insights.js";
 import { runMcpServer } from "./mcp.js";
 import { runHook } from "./hook.js";
 import { registerAll, installSkill } from "./register.js";
@@ -79,6 +85,9 @@ Usage:
   oh migrate              (Re)write the schema SQL to paste into Supabase.
   oh backfill [--since W] Seed the store from your existing Claude+Codex sessions.
   oh ask "<question>"     Query the store from the terminal (--who --repo --since W).
+  oh insights             Your last 7 days of vibecoding: time anatomy, tokens,
+                          friction, fun stats (--since W, --repo R, --who NAME,
+                          or --team for per-author aggregates).
   oh status               Show config + how much is in the Team Brain.
 
 Internal (wired by 'oh init'):
@@ -273,6 +282,28 @@ async function cmdAsk(
   console.log(formatAskResult(result));
 }
 
+async function cmdInsights(opts: {
+  since?: string;
+  who?: string;
+  repo?: string;
+  team?: boolean;
+}): Promise<void> {
+  const cfg = loadConfig();
+  const { db } = makeClients(cfg);
+  const sinceIso = parseSince(opts.since ?? "7d");
+  const author = opts.team ? null : (opts.who ?? cfg.author);
+  const rows = await db.fetchMetrics({
+    author,
+    repo: opts.repo ?? null,
+    since: sinceIso,
+  });
+  if (opts.team) {
+    console.log(formatTeamInsights(computeTeamInsights(rows, sinceIso), sinceIso));
+  } else {
+    console.log(formatInsights(computeInsights(rows, { author, sinceIso })));
+  }
+}
+
 async function cmdStatus(): Promise<void> {
   const cfg = loadConfig();
   let host = cfg.supabaseUrl;
@@ -319,6 +350,7 @@ async function main(): Promise<void> {
       repos: { type: "string" },
       who: { type: "string" },
       repo: { type: "string" },
+      team: { type: "boolean" },
     },
   });
 
@@ -351,6 +383,14 @@ async function main(): Promise<void> {
         who: values.who,
         repo: values.repo,
         since: values.since,
+      });
+      break;
+    case "insights":
+      await cmdInsights({
+        since: values.since,
+        who: values.who,
+        repo: values.repo,
+        team: Boolean(values.team),
       });
       break;
     case "capture":

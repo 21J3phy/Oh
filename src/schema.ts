@@ -34,6 +34,37 @@ create index if not exists chunks_repo_ts_idx   on chunks (repo, ts desc);
 create index if not exists chunks_author_idx    on chunks (author);
 create index if not exists chunks_session_idx   on chunks (session_id);
 
+-- Capture-time Metrics, one row per exchange (ADR 0007). Mechanical facts only
+-- (tokens, durations, errors) parsed from the same files Capture reads; no
+-- embedding. Read by the Insights view ('oh insights') and the rabbit-hole Nudge.
+create table if not exists exchange_metrics (
+  id                 text primary key,    -- '<session_id>:<exchange_index>'
+  session_id         text not null references sessions(id) on delete cascade,
+  author             text not null,
+  tool               text not null,
+  repo               text,
+  exchange_index     int  not null,
+  ts                 timestamptz not null,
+  ended_at           timestamptz not null,
+  think_ms           bigint,              -- gap from previous exchange's end to this prompt
+  work_ms            bigint not null default 0,
+  input_tokens       bigint not null default 0,
+  output_tokens      bigint not null default 0,
+  cache_read_tokens  bigint not null default 0,
+  cache_write_tokens bigint not null default 0,
+  tool_calls         int not null default 0,
+  file_reads         int not null default 0,
+  file_edits         int not null default 0,
+  errors             int not null default 0,
+  interrupted        boolean not null default false,
+  is_correction      boolean not null default false,
+  model              text
+);
+
+create index if not exists exchange_metrics_author_ts_idx  on exchange_metrics (author, ts desc);
+create index if not exists exchange_metrics_repo_ts_idx    on exchange_metrics (repo, ts desc);
+create index if not exists exchange_metrics_session_idx    on exchange_metrics (session_id);
+
 -- Top-N similarity search with optional who/repo/since filters. The recency
 -- re-rank (similarity + lambda*recency) happens client-side over these rows.
 create or replace function match_chunks(

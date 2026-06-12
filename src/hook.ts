@@ -1,8 +1,11 @@
 // Hook entrypoint. Fired by Claude/Codex Stop/SessionEnd hooks. Reads the
-// hook payload from stdin, spawns a DETACHED `oh capture` so it never blocks
-// the turn, and exits immediately.
+// hook payload from stdin, surfaces any pending rabbit-hole Nudge for this
+// session (written by an earlier detached capture — ADR 0007), spawns a
+// DETACHED `oh capture` so it never blocks the turn, and exits immediately.
 
 import { spawn } from "node:child_process";
+import { existsSync, readFileSync, renameSync } from "node:fs";
+import { nudgePath } from "./capture.js";
 import type { Tool } from "./types.js";
 import { log } from "./log.js";
 
@@ -31,6 +34,34 @@ function findTranscriptPath(payload: unknown): string | null {
   return typeof candidate === "string" && candidate ? candidate : null;
 }
 
+function findSessionId(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const p = payload as Record<string, unknown>;
+  const candidate = p["session_id"] ?? p["sessionId"];
+  return typeof candidate === "string" && candidate ? candidate : null;
+}
+
+/**
+ * If a detached capture flagged this session as circling, show the one-shot
+ * Nudge via the hook's `systemMessage` output (warning-style, never blocks)
+ * and mark it consumed. Claude-only in v0.1 — Codex has no equivalent surface.
+ */
+function deliverNudge(tool: Tool, sessionId: string | null): void {
+  if (tool !== "claude" || !sessionId) return;
+  const pending = nudgePath(sessionId);
+  try {
+    if (!existsSync(pending)) return;
+    const { message } = JSON.parse(readFileSync(pending, "utf8")) as { message?: string };
+    renameSync(pending, `${pending}.done`); // consume before printing — at most once
+    if (message) {
+      process.stdout.write(JSON.stringify({ systemMessage: message }) + "\n");
+      log("hook", `${sessionId}: delivered rabbit-hole nudge`);
+    }
+  } catch (err) {
+    log("hook", `nudge delivery failed — ${(err as Error).message}`, true);
+  }
+}
+
 export async function runHook(tool: Tool, cliPath: string): Promise<void> {
   let payload: unknown = null;
   try {
@@ -39,6 +70,8 @@ export async function runHook(tool: Tool, cliPath: string): Promise<void> {
   } catch {
     // Malformed/absent payload is fine — we fall back to a sweep below.
   }
+
+  deliverNudge(tool, findSessionId(payload));
 
   const transcript = findTranscriptPath(payload);
   const args = transcript

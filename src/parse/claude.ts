@@ -57,8 +57,31 @@ function summarizeTool(name: unknown, input: unknown): string {
   }
 }
 
+/** Claude repeats the same message.usage on every line of a multi-block
+ *  assistant message — count each API message's usage once. */
+function usageFrom(message: any, seenIds: Set<string>): { usage?: ParsedEvent["usage"]; model?: string } {
+  const u = message?.usage;
+  const id = typeof message?.id === "string" ? message.id : null;
+  const model = typeof message?.model === "string" ? message.model : undefined;
+  if (!u || typeof u !== "object" || (id && seenIds.has(id))) return { model };
+  if (id) seenIds.add(id);
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  return {
+    model,
+    usage: {
+      input: n(u.input_tokens),
+      output: n(u.output_tokens),
+      cacheRead: n(u.cache_read_input_tokens),
+      cacheWrite: n(u.cache_creation_input_tokens),
+    },
+  };
+}
+
+const INTERRUPT_RE = /^\[Request interrupted/i;
+
 export function parseClaude(content: string): ParseResult {
   const events: ParsedEvent[] = [];
+  const seenUsageIds = new Set<string>();
   let sessionId: string | null = null;
   let cwd: string | null = null;
 
@@ -82,19 +105,33 @@ export function parseClaude(content: string): ParseResult {
         const text = cleanUserText(c);
         if (text) {
           if (evCwd && !cwd) cwd = evCwd;
-          events.push({ kind: "user", ts, text, cwd: evCwd });
+          events.push({
+            kind: "user",
+            ts,
+            text,
+            cwd: evCwd,
+            ...(INTERRUPT_RE.test(text) ? { interrupted: true } : {}),
+          });
+        }
+      } else if (Array.isArray(c)) {
+        // tool_result blocks — raw output stays dropped, but the error bit is a metric
+        for (const b of c) {
+          if (b && typeof b === "object" && b.type === "tool_result") {
+            events.push({ kind: "tool_result", ts, cwd: evCwd, isError: b.is_error === true });
+          }
         }
       }
-      // list content == tool_result blocks (raw output) — intentionally dropped
     } else if (e.type === "assistant") {
       if (e.isSidechain) continue;
       const blocks = e.message?.content;
       if (!Array.isArray(blocks)) continue;
       if (evCwd && !cwd) cwd = evCwd;
+      const { usage, model } = usageFrom(e.message, seenUsageIds);
+      if (usage) events.push({ kind: "meta", ts, cwd: evCwd, usage, model });
       for (const b of blocks) {
         if (!b || typeof b !== "object") continue;
         if (b.type === "text" && typeof b.text === "string" && b.text.trim()) {
-          events.push({ kind: "assistant", ts, text: b.text.trim(), cwd: evCwd });
+          events.push({ kind: "assistant", ts, text: b.text.trim(), cwd: evCwd, model });
         } else if (b.type === "thinking" && typeof b.thinking === "string" && b.thinking.trim()) {
           events.push({ kind: "reasoning", ts, text: b.thinking.trim(), cwd: evCwd });
         } else if (b.type === "tool_use") {

@@ -26,6 +26,31 @@ export interface MatchFilters {
   since?: string | null;
 }
 
+/** A row in exchange_metrics — capture-time Metrics for the Insights view. */
+export interface MetricsRow {
+  id: string;
+  session_id: string;
+  author: string;
+  tool: Tool;
+  repo: string | null;
+  exchange_index: number;
+  ts: string;
+  ended_at: string;
+  think_ms: number | null;
+  work_ms: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  tool_calls: number;
+  file_reads: number;
+  file_edits: number;
+  errors: number;
+  interrupted: boolean;
+  is_correction: boolean;
+  model: string | null;
+}
+
 export function chunkId(sessionId: string, exchangeIndex: number): string {
   return `${sessionId}:${exchangeIndex}`;
 }
@@ -34,6 +59,8 @@ export interface Db {
   raw: SupabaseClient;
   upsertSession(s: SessionMeta): Promise<void>;
   upsertChunks(exchanges: Exchange[], embeddings: number[][]): Promise<void>;
+  upsertMetrics(exchanges: Exchange[]): Promise<void>;
+  fetchMetrics(filters: MatchFilters): Promise<MetricsRow[]>;
   matchChunks(
     embedding: number[],
     matchCount: number,
@@ -88,6 +115,59 @@ export function createDb(cfg: Config): Db {
         const batch = rows.slice(i, i + UPSERT_BATCH);
         const { error } = await sb.from("chunks").upsert(batch, { onConflict: "id" });
         if (error) throw new Error(`upsertChunks failed: ${error.message}`);
+      }
+    },
+
+    async upsertMetrics(exchanges: Exchange[]): Promise<void> {
+      if (exchanges.length === 0) return;
+      const rows = exchanges.map((ex) => ({
+        id: chunkId(ex.sessionId, ex.index),
+        session_id: ex.sessionId,
+        author: ex.author,
+        tool: ex.tool,
+        repo: ex.repo,
+        exchange_index: ex.index,
+        ts: ex.ts,
+        ended_at: ex.metrics.endedAt,
+        think_ms: ex.metrics.thinkMs,
+        work_ms: ex.metrics.workMs,
+        input_tokens: ex.metrics.inputTokens,
+        output_tokens: ex.metrics.outputTokens,
+        cache_read_tokens: ex.metrics.cacheReadTokens,
+        cache_write_tokens: ex.metrics.cacheWriteTokens,
+        tool_calls: ex.metrics.toolCalls,
+        file_reads: ex.metrics.fileReads,
+        file_edits: ex.metrics.fileEdits,
+        errors: ex.metrics.errors,
+        interrupted: ex.metrics.interrupted,
+        is_correction: ex.metrics.isCorrection,
+        model: ex.metrics.model,
+      }));
+      for (let i = 0; i < rows.length; i += UPSERT_BATCH) {
+        const batch = rows.slice(i, i + UPSERT_BATCH);
+        const { error } = await sb.from("exchange_metrics").upsert(batch, { onConflict: "id" });
+        if (error) throw new Error(`upsertMetrics failed: ${error.message}`);
+      }
+    },
+
+    async fetchMetrics(filters: MatchFilters): Promise<MetricsRow[]> {
+      const PAGE = 1000; // Supabase caps a select at 1000 rows
+      const out: MetricsRow[] = [];
+      for (let from = 0; ; from += PAGE) {
+        let q = sb
+          .from("exchange_metrics")
+          .select("*")
+          .order("ts", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (filters.author) q = q.ilike("author", filters.author);
+        if (filters.repo) q = q.eq("repo", filters.repo);
+        if (filters.since) q = q.gte("ts", filters.since);
+        const { data, error } = await q;
+        if (error) throw new Error(`fetchMetrics failed: ${error.message}`);
+        const rows = (data ?? []) as MetricsRow[];
+        out.push(...rows);
+        if (rows.length < PAGE) return out;
       }
     },
 
