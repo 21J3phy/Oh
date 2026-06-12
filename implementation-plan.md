@@ -112,7 +112,7 @@ Per [ADR 0007](./docs/adr/0007-insights-from-capture-metrics.md): the raw sessio
 2. **Tokens, not dollars** — no price table to maintain/go stale.
 3. **Time anatomy thresholds** — think gap ≤ 5 min = "you prompting/thinking"; 5–30 min = "away while agent waited"; > 30 min = excluded (left for the day). Stated in the report footer.
 4. **Rabbit-hole signature** — trailing streak of ≥ 4 exchanges that are corrections or contain tool errors. Deterministic, explainable, tunable later.
-5. **Nudge delivery** — written by the detached capture, surfaced by the *next* Stop hook as `systemMessage`. One per session (consumed marker). Claude only in v0.1 (Codex hook output surface unverified).
+5. **Nudge delivery** — written by the detached capture, surfaced by the *next* Stop hook as `systemMessage`. One per session (consumed marker). Cross-tool: Codex ≥0.13x mirrors Claude's hook contract (stdin payload with `hook_event_name`/`session_id`/`transcript_path`, `systemMessage` output, `SessionStart` event) — verified against the binary's output schema and live Stop-hook logs, 2026-06.
 6. **Backfill** — `metricsV` in offset state forces one metrics-only re-sweep of already-captured sessions; embedding remains tail-only (no re-embed cost).
 
 ## Verification

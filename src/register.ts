@@ -222,19 +222,23 @@ export function registerCodex(
   const cmd = hookCommand(node, cli, "codex");
 
   // --- hooks (hooks.json) ---
+  // Codex (≥0.13x) mirrors Claude's hook contract: stdin JSON payload with
+  // hook_event_name/session_id/transcript_path, systemMessage output rendered
+  // to the user. Stop captures; SessionStart shows the daily brief.
   const hooks = readJson(paths.codexHooks);
-  const added = addHookToConfig(hooks, "Stop", cmd);
-  if (added) {
+  const addedStop = addHookToConfig(hooks, "Stop", cmd);
+  const addedStart = addHookToConfig(hooks, "SessionStart", cmd);
+  if (addedStop || addedStart) {
     if (apply) {
       backup(paths.codexHooks, result);
       writeJson(paths.codexHooks, hooks);
     }
-    result.changed.push(`${paths.codexHooks} (capture hook: Stop)`);
+    result.changed.push(`${paths.codexHooks} (hooks: Stop/SessionStart)`);
     result.notes.push(
       "Codex may ask you to trust the new hook on its next run (hook-trust prompt).",
     );
   } else {
-    result.skipped.push(`${paths.codexHooks} (capture hook already present)`);
+    result.skipped.push(`${paths.codexHooks} (hooks already present)`);
   }
 
   // --- MCP server (config.toml, add or path-correct, preserving the file) ---
