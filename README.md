@@ -1,14 +1,24 @@
-# Oh — v0 (`ask`)
+# Oh — the memory layer for AI-coding teams
 
-Shared memory for a small AI-coding team. Oh captures each person's AI-coding
-**Sessions** across **Claude Code** and **Codex**, embeds the *reasoning* into a
-shared store, and exposes one tool — **`ask`** — so a teammate's agent can answer
-*"why is this code/plan the way it is?"* **instead of interrupting the author to
-re-explain.**
+Your team's AI sessions hold all the reasoning behind your code — and today
+that memory dies when each session ends. Oh keeps it: every **Session** across
+**Claude Code** and **Codex** is captured into a shared, secret-scrubbed store
+(the **Team Brain**) that outlives the session, the tool, and even the person.
+
+On top of that memory, Oh does useful things. **Two are live:**
+
+1. **Shared memory (`ask`)** — a teammate's agent answers *"why is this
+   code/plan the way it is?"* with citations from your Sessions, **instead of
+   interrupting you to re-explain**.
+2. **Insights** — your vibecoding, measured from your own memory: time anatomy
+   (you prompting vs the agent working vs you away), token economy, rabbit-hole
+   detection, a daily brief, and an in-session nudge. Visible **only to you**.
 
 This is the dogfood build. See [`implementation-plan.md`](./implementation-plan.md)
-for the design and [ADR 0006](./docs/adr/0006-pivot-small-team-re-explaining-loop.md)
-for why the wedge is the re-explaining loop.
+for the design, [ADR 0001](./docs/adr/0001-one-engine-many-views.md) for the
+one-memory-many-views architecture, and
+[ADR 0006](./docs/adr/0006-pivot-small-team-re-explaining-loop.md) for why the
+go-to-market wedge is the re-explaining loop.
 
 ## Get Started
 

@@ -1,6 +1,6 @@
-# Oh — Shared Memory for AI-Coding Teams
+# Oh — The Memory Layer for AI-Coding Teams
 
-The context layer for teams whose code is largely written by AI agents: it preserves the *reasoning* behind every change so a teammate's agent can answer *why* something was done — instead of interrupting the author to re-explain.
+Oh keeps the memory of a team's AI-coding sessions — persistent across sessions, tools, and people — and builds useful things on it (one Engine, many Views; ADR 0001). Two Views are live: **Ask-why** (a teammate's agent answers *why* something was done, instead of interrupting the author to re-explain) and **Insights** (what your own memory says about your vibecoding — individual-only).
 
 ## Language
 
