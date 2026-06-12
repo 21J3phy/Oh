@@ -1,11 +1,19 @@
 {
   "name": "oh-brain",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Oh — give your AI a past. The verbatim memory layer for AI coding: every Claude Code + Codex session becomes memory your agent can recall (yours to recall, your team's to ask, your week to see).",
   "type": "module",
   "license": "Elastic-2.0",
   "homepage": "https://oh-landing-mu.vercel.app",
-  "keywords": ["ai", "memory", "claude-code", "codex", "mcp", "team", "context"],
+  "keywords": [
+    "ai",
+    "memory",
+    "claude-code",
+    "codex",
+    "mcp",
+    "team",
+    "context"
+  ],
   "bin": {
     "oh": "dist/cli.js"
   },

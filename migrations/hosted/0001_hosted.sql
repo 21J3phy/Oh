@@ -176,8 +176,7 @@ begin
   insert into teams (name, owner_id) values (p_name, auth.uid()) returning id into v_team;
   insert into members (team_id, user_id, author_name, role)
     values (v_team, auth.uid(), p_author, 'owner');
-  v_code := encode(gen_random_bytes(6), 'base64');
-  v_code := translate(v_code, '+/=', 'xyz');
+  v_code := substr(replace(gen_random_uuid()::text, '-', ''), 1, 10);
   insert into invites (code, team_id, created_by) values (v_code, v_team, auth.uid());
   return json_build_object('team_id', v_team, 'invite_code', v_code);
 end;

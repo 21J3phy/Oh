@@ -235,6 +235,30 @@
   .install-step .ic { color: var(--phos); margin-right: 10px; }
   .install-step .t-dim { font-size: 12px; }
 
+  /* ---- agent prompt + self-host ---- */
+  .agent-box { margin-top: 34px; border: 1px solid var(--line); background: var(--ink-2); }
+  .agent-head {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 13px 18px; border-bottom: 1px solid var(--line);
+    font-size: 12px; color: var(--phos-soft); letter-spacing: 0.04em;
+  }
+  .copy-btn {
+    font-family: var(--display); font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+    background: transparent; color: var(--phos); border: 1px solid var(--phos-soft);
+    padding: 6px 14px; cursor: pointer; transition: background .2s;
+  }
+  .copy-btn:hover { background: var(--phos-glow); }
+  .agent-prompt {
+    margin: 0; padding: 20px 22px; font-family: var(--mono); font-size: 12px;
+    line-height: 1.8; color: var(--bone-dim); white-space: pre-wrap; word-break: break-word;
+  }
+  .selfhost { margin-top: 26px; }
+  .selfhost summary {
+    cursor: pointer; font-size: 13px; color: var(--bone-faint); letter-spacing: 0.03em;
+    padding: 10px 0;
+  }
+  .selfhost summary:hover { color: var(--phos); }
+
   /* ---- pricing ---- */
   .tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 52px; align-items: stretch; }
   @media (max-width: 820px) { .tiers { grid-template-columns: 1fr; } }
@@ -397,16 +421,45 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
   </section>
 
   <section id="get">
-    <div class="kicker reveal">Open beta</div>
-    <h2 class="reveal">Four commands. <em>Then it just remembers.</em></h2>
-    <p class="prose reveal">The beta is <strong>free</strong> and bring-your-own-keys: a free Supabase project (your memory lives in <em>your</em> database, not ours) and an OpenAI API key for embeddings (pennies). Hosted Oh — no keys, no setup — is what comes next.</p>
+    <div class="kicker reveal">Open beta · free · no keys</div>
+    <h2 class="reveal">Five commands. <em>Then it just remembers.</em></h2>
     <div class="install reveal">
       <div class="install-step"><span class="ic">$</span> npm install -g oh-brain</div>
-      <div class="install-step"><span class="ic">$</span> oh migrate <span class="t-dim"># paste ~/.oh/schema.sql into your (free) Supabase project's SQL editor, once</span></div>
-      <div class="install-step"><span class="ic">$</span> oh init <span class="t-dim"># your name + Supabase URL/secret key + OpenAI key; wires Claude Code &amp; Codex</span></div>
+      <div class="install-step"><span class="ic">$</span> oh signup <span class="t-dim"># email + password, click the confirmation link</span></div>
+      <div class="install-step"><span class="ic">$</span> oh team create "Acme" <span class="t-dim"># or: oh team join &lt;invite-code&gt; — solo counts as a team of one</span></div>
+      <div class="install-step"><span class="ic">$</span> oh init --yes <span class="t-dim"># wires Claude Code &amp; Codex (hooks + ask + insights)</span></div>
       <div class="install-step"><span class="ic">$</span> oh backfill <span class="t-dim"># give it your past — seeds memory from your existing sessions</span></div>
     </div>
-    <p class="prose reveal" style="font-size:13px; margin-top:18px">Restart Claude Code and Codex, then try it: <em style="font-family:var(--serif); color:var(--phos)">"ask what I was working on last week"</em>. <strong>Teams:</strong> everyone runs the same four commands against one shared Supabase project — that's the whole team brain. Stuck? <a href="mailto:niravsurabhi@gmail.com?subject=Oh%20beta%20help" style="color:var(--cite)">email us</a>, a human answers.</p>
+    <p class="prose reveal" style="font-size:13px; margin-top:18px">Restart Claude Code and Codex, then try it: <em style="font-family:var(--serif); color:var(--phos)">"ask what I was working on last week"</em>. Teammates join with your invite code. Stuck? <a href="mailto:niravsurabhi@gmail.com?subject=Oh%20beta%20help" style="color:var(--cite)">email us</a>, a human answers.</p>
+
+    <div class="agent-box reveal">
+      <div class="agent-head">
+        <span>Lazier (recommended): paste this into Claude Code and let your agent do it</span>
+        <button class="copy-btn" id="copyPrompt">copy</button>
+      </div>
+      <pre class="agent-prompt" id="agentPrompt">Set up Oh — the memory layer that gives my AI coding agents a past (oh-landing-mu.vercel.app) — on my machine, end to end:
+
+1. Check Node ≥ 20, then run: npm install -g oh-brain
+2. Ask me for: my email, my display name, and whether I'm CREATING a new team or JOINING one (if joining, ask for the invite code; solo = create a team of one).
+3. Signup and login are interactive (password + email confirmation), so tell me to run these myself in a terminal and wait for me to confirm I'm done:
+     oh signup --email MY_EMAIL    (choose a password, click the link in my inbox — the page it lands on may error; that's fine)
+     oh login --email MY_EMAIL
+4. Then run: oh team create "TEAM_NAME" --author "MY_NAME"   (or: oh team join INVITE_CODE --author "MY_NAME")
+5. Run: oh init --yes
+6. Run: oh backfill   (seeds my memory from my existing Claude/Codex sessions)
+7. Tell me to fully restart Claude Code and Codex (approve the Codex hook-trust prompt), verify with oh status, and show me the invite code from oh team to share with teammates.</pre>
+    </div>
+
+    <details class="selfhost reveal">
+      <summary>Prefer your own infrastructure? Self-host (also free, forever)</summary>
+      <p class="prose" style="font-size:13px; margin-top:14px">Your memory lives in <em>your</em> Supabase project; embeddings use <em>your</em> OpenAI key. Same CLI, same features — the Elastic License guarantees this path stays open.</p>
+      <div class="install" style="margin-top:16px; border-color: var(--line); box-shadow: none;">
+        <div class="install-step"><span class="ic">$</span> npm install -g oh-brain</div>
+        <div class="install-step"><span class="ic">$</span> oh migrate <span class="t-dim"># paste ~/.oh/schema.sql into your Supabase project's SQL editor, once</span></div>
+        <div class="install-step"><span class="ic">$</span> oh init <span class="t-dim"># name + Supabase URL/secret key + OpenAI key</span></div>
+        <div class="install-step"><span class="ic">$</span> oh backfill</div>
+      </div>
+    </details>
   </section>
 
   <section id="pricing">
@@ -435,7 +488,7 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
           <li>Everything in Free</li>
           <li>Priority support</li>
         </ul>
-        <a class="btn" href="mailto:niravsurabhi@gmail.com?subject=Hosted%20Oh%20(team%20tier)&body=Team%20name%20and%20size%3A">Arrives with hosted Oh — get notified</a>
+        <a class="btn" href="#get">Free during the beta — install now</a>
       </div>
       <div class="tier reveal">
         <h3>Enterprise</h3>
@@ -449,7 +502,7 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
         <a class="btn ghost" href="mailto:niravsurabhi@gmail.com?subject=Oh%20enterprise">Talk to us</a>
       </div>
     </div>
-    <p class="pricing-note reveal"><strong style="color:var(--phos)">During the open beta everything is free</strong> (bring your own keys — your Supabase, your OpenAI). Paid tiers arrive with hosted Oh. The cap will be <em>memory, not features</em> — everything works on Free and ages out after 30 days. The day an answer you needed has expired, you'll know exactly what you're paying for.</p>
+    <p class="pricing-note reveal"><strong style="color:var(--phos)">During the open beta everything is free</strong> — hosted, no keys, no card. Paid tiers arrive when the beta ends. The cap will be <em>memory, not features</em> — everything works on Free and ages out after 30 days. The day an answer you needed has expired, you'll know exactly what you're paying for. Self-hosting stays free forever.</p>
   </section>
 
   <div class="outro">
@@ -534,6 +587,16 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
     es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); ro.unobserve(e.target); } });
   }, { threshold: 0.12 });
   document.querySelectorAll(".reveal").forEach((el) => ro.observe(el));
+
+  // ---- copy the agent prompt ----
+  const copyBtn = document.getElementById("copyPrompt");
+  copyBtn?.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById("agentPrompt").textContent.trim());
+      copyBtn.textContent = "copied ✓";
+      setTimeout(() => (copyBtn.textContent = "copy"), 2000);
+    } catch { copyBtn.textContent = "select + copy"; }
+  });
 
   // ---- memory decay: the quote literally fades as you read it ----
   const decay = document.getElementById("decay");

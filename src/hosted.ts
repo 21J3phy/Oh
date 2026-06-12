@@ -6,9 +6,10 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { saveConfig } from "./config.js";
 import type { Config, HostedConfig } from "./types.js";
 
-// Filled at provision time — see migrations/hosted/0001_hosted.sql and ADR 0010.
-export const HOSTED_URL = "__OH_HOSTED_URL__";
-export const HOSTED_ANON_KEY = "__OH_HOSTED_ANON_KEY__";
+// The hosted store (provisioned 2026-06-12 — ADR 0010). Public by design:
+// the anon key grants nothing without a user JWT; RLS enforces everything.
+export const HOSTED_URL = "https://ouldbekgmhurgaxyawfy.supabase.co";
+export const HOSTED_ANON_KEY = "sb_publishable_FuJ6YvZeHB6iXO-0eAUUAQ_ZazfgS9i";
 /** The embedding proxy (holds Oh's OpenAI key; verifies the user's JWT). */
 export const EMBED_ENDPOINT = "https://oh-landing-mu.vercel.app/api/embed";
 

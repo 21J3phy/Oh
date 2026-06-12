@@ -397,14 +397,18 @@ async function cmdLogin(opts: { email?: string }): Promise<void> {
   }
 }
 
-async function cmdTeam(sub: string | undefined, arg: string | undefined): Promise<void> {
+async function cmdTeam(
+  sub: string | undefined,
+  arg: string | undefined,
+  authorFlag?: string,
+): Promise<void> {
   const cfg = readPartialConfig();
   if (cfg.mode !== "hosted" || !cfg.hosted) throw new Error("run `oh login` first");
   const sb = await hostedClient(cfg as Config);
 
   if (sub === "create") {
-    if (!arg) throw new Error('usage: oh team create "<team name>"');
-    const author = await resolveAuthor();
+    if (!arg) throw new Error('usage: oh team create "<team name>" [--author "Name"]');
+    const author = await resolveAuthor(authorFlag);
     const { data, error } = await sb.rpc("create_team", { p_name: arg, p_author: author });
     if (error) throw new Error(`create_team failed: ${error.message}`);
     const r = data as { team_id: string; invite_code: string };
@@ -415,8 +419,8 @@ async function cmdTeam(sub: string | undefined, arg: string | undefined): Promis
     return;
   }
   if (sub === "join") {
-    if (!arg) throw new Error("usage: oh team join <invite-code>");
-    const author = await resolveAuthor();
+    if (!arg) throw new Error('usage: oh team join <invite-code> [--author "Name"]');
+    const author = await resolveAuthor(authorFlag);
     const { data, error } = await sb.rpc("join_team", { p_code: arg, p_author: author });
     if (error) throw new Error(`join_team failed: ${error.message}`);
     const r = data as { team_id: string };
@@ -531,7 +535,7 @@ async function main(): Promise<void> {
       await cmdLogin({ email: values.email });
       break;
     case "team":
-      await cmdTeam(positionals[1], positionals.slice(2).join(" ") || undefined);
+      await cmdTeam(positionals[1], positionals.slice(2).join(" ") || undefined, values.author);
       break;
     case "init":
       await cmdInit({
