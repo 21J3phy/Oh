@@ -29,11 +29,20 @@ go-to-market wedge is the re-explaining loop.
 
 ## Get Started
 
-Joining a team that's already running Oh? **Get access, grab two keys, paste one prompt:**
+Oh is in **open beta** — installable by anyone from npm (`oh-brain`; the CLI is `oh`), free, bring-your-own-keys.
 
-**0. Get repo access** — the repo is private; ask your team admin to add you as
-a collaborator on `21J3phy/Oh`, and make sure `gh auth login` (or your git
-credentials) works on your machine.
+**Solo or new team (the beta path):**
+
+```bash
+npm install -g oh-brain
+oh migrate     # paste ~/.oh/schema.sql into your (free) Supabase project's SQL editor, once
+oh init        # your name + Supabase URL/secret key + OpenAI key; wires Claude Code & Codex
+oh backfill    # give it your past — seeds memory from your existing sessions
+```
+
+Restart Claude Code and Codex (approve the one-time Codex hook-trust prompt), then try: *"ask what I was working on last week."* Teams: everyone runs the same four commands against **one shared Supabase project** — that's the whole team brain.
+
+**Joining a team that's already running Oh? Grab two keys, paste one prompt:**
 
 **1. Get these two keys**
 - The team's **Supabase secret key** (`sb_secret_…`) — ask your team admin; they should share it via a password manager, not chat.
@@ -43,14 +52,14 @@ credentials) works on your machine.
 
 > Set up **"Oh"** (our team's shared AI-coding memory) on my machine, end to end. It captures our Claude/Codex sessions into a shared store so we can `ask` why code or decisions are the way they are instead of interrupting each other. Do this, showing me any errors:
 >
-> 1. Clone & build (if `~/oh` already exists, `cd ~/oh && git pull` instead): `git clone https://github.com/21J3phy/Oh.git ~/oh && cd ~/oh && npm install`
-> 2. Ask me for (a) my name, (b) my OpenAI API key, and (c) the team's Supabase URL and secret key (`sb_secret_…` — both from my team admin). Then run, substituting my answers: `node ~/oh/dist/cli.js init --yes --author "MY_NAME" --supabase-url "TEAM_SUPABASE_URL" --supabase-key "TEAM_SUPABASE_KEY" --openai-key "MY_OPENAI_KEY" --repos "21j3phy/oh"`
-> 3. Seed my history: `node ~/oh/dist/cli.js backfill`
-> 4. Tell me to fully restart Claude Code and Codex (approve the Codex hook-trust prompt). Confirm with `node ~/oh/dist/cli.js status`.
+> 1. Install: `npm install -g oh-brain`
+> 2. Ask me for (a) my name, (b) my OpenAI API key, and (c) the team's Supabase URL and secret key (`sb_secret_…` — both from my team admin). Then run, substituting my answers: `oh init --yes --author "MY_NAME" --supabase-url "TEAM_SUPABASE_URL" --supabase-key "TEAM_SUPABASE_KEY" --openai-key "MY_OPENAI_KEY"`
+> 3. Seed my history: `oh backfill`
+> 4. Tell me to fully restart Claude Code and Codex (approve the Codex hook-trust prompt). Confirm with `oh status`.
 
 **3. Restart Claude Code and Codex** when the agent finishes. Then in either tool just say *"ask why we …?"* — the `ask-why` skill nudges your agent to query the shared store.
 
-Prereq: **Node ≥ 20**. Standing up a brand-new team from scratch (no admin yet)? See [One-time project setup](#one-time-project-setup-one-person-does-this) below.
+Prereq: **Node ≥ 20**. Core team working on Oh itself: clone this (private) repo instead and use `node dist/cli.js` — collaborator access required. Standing up a brand-new team from scratch? See [One-time project setup](#one-time-project-setup-one-person-does-this) below.
 
 ## How it works
 
