@@ -44,7 +44,7 @@ The small per-Exchange row of mechanical facts (tokens, durations, tool/error/in
 _Avoid_: analytics, telemetry (those imply a separate collection pipeline; Metrics are a byproduct of Capture)
 
 **Insights**:
-The View that turns Metrics into a report — time anatomy (prompting vs agent working vs away), token economy, rabbit-hole episodes, fun stats. Pull by default (`oh insights`); individual numbers default to the individual, team views show aggregates. See [ADR 0007](./docs/adr/0007-insights-from-capture-metrics.md).
+The View that turns Metrics into a report — time anatomy (prompting vs agent working vs away), token economy, rabbit-hole episodes, fun stats. Pull-only (`oh insights`) and **visible only to the individual dev** — no teammate, team, or manager view, ever ([ADR 0008](./docs/adr/0008-insights-wallet-opener-individual-only.md); buyer-facing artifacts are limited to ask-deflection counts and org-level spend totals). See [ADR 0007](./docs/adr/0007-insights-from-capture-metrics.md) for the Metrics design.
 
 **Nudge**:
 The one push Insight: a one-shot, self-only, in-session note that the current Session is circling (a streak of correction/error Exchanges). Delivered by the next Stop hook; never blocks a turn; at most one per Session.

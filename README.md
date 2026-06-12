@@ -141,14 +141,15 @@ embedding cost). Two surfaces use it:
   how that splits into *you prompting* vs *the agent working* vs *you away*;
   token totals and cache-hit rate; your most expensive exchange; corrections,
   errors, and rabbit-hole episodes; plus peak hour / longest session.
-  `--since 30d`, `--repo X`, `--who NAME`, or `--team` (per-author aggregates).
+  `--since 30d`, `--repo X` to narrow.
 - **The rabbit-hole nudge** — if a session shows 4+ consecutive
   correction/error turns, the next turn ends with a one-line note ("9 turns
   circling, ~80k tokens — a fresh start is often cheaper"). At most once per
   session, visible only to you.
 
-Your numbers default to you; team views are aggregates
-(see [ADR 0007](./docs/adr/0007-insights-from-capture-metrics.md)).
+Insights are **individual-only**: `oh insights` always reports your own
+sessions — there is no teammate, team, or manager view
+(see [ADR 0008](./docs/adr/0008-insights-wallet-opener-individual-only.md)).
 
 ## Commands
 
@@ -157,7 +158,7 @@ Your numbers default to you; team views are aggregates
 | `oh init` | Configure, print schema, wire Claude + Codex. |
 | `oh migrate` | (Re)write `~/.oh/schema.sql` to paste into Supabase. |
 | `oh backfill [--since W]` | Seed the store from existing sessions. |
-| `oh insights [--since W] [--who N \| --team] [--repo R]` | Time/token/friction report from your captured sessions. |
+| `oh insights [--since W] [--repo R]` | Time/token/friction report — your own sessions only. |
 | `oh status` | Show config + chunk count in the Team Brain. |
 | `oh capture --file F --tool T` · `oh capture --all` | Internal (wired by hooks). |
 | `oh mcp` | Internal — the stdio MCP server. |

@@ -19,7 +19,9 @@ The first **Flags/Insights View** ships as **v0.1**: at Capture time the Engine 
 
 ## Visibility (consistent with ADR 0003 / CONTEXT.md Visibility Policy)
 
-Metrics rows live in the shared Team Brain like everything else (they are far *less* sensitive than the reasoning text already stored). Display defaults: **individual numbers to the individual; team views show aggregates**. The Nudge is visible only in the author's own session. No manager reports in v0.1 — small high-trust teams, same stance as ADR 0006.
+> **Superseded in part by [ADR 0008](./0008-insights-wallet-opener-individual-only.md):** the team-aggregate allowance below is withdrawn — Insights are visible **only to the individual dev**. The rest of this ADR stands.
+
+Metrics rows live in the shared Team Brain like everything else (they are far *less* sensitive than the reasoning text already stored). ~~Display defaults: **individual numbers to the individual; team views show aggregates**.~~ The Nudge is visible only in the author's own session. No manager reports in v0.1 — small high-trust teams, same stance as ADR 0006.
 
 ## Considered and rejected
 

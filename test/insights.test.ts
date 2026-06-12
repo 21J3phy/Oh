@@ -5,12 +5,10 @@ import { parseCodex } from "../src/parse/codex.js";
 import { toExchanges } from "../src/normalize.js";
 import {
   computeInsights,
-  computeTeamInsights,
   countRabbitHoleEpisodes,
   detectRabbitHole,
   formatInsights,
   formatNudge,
-  formatTeamInsights,
   RABBIT_HOLE_MIN_STREAK,
 } from "../src/insights.js";
 import type { MetricsRow } from "../src/db.js";
@@ -214,9 +212,4 @@ test("formatters render without blowing up, including the empty case", () => {
   const full = formatInsights(computeInsights([row({})], { author: "alice", sinceIso: "2026-05-01T00:00:00Z" }));
   assert.ok(full.includes("alice's vibecoding"));
   assert.ok(full.includes("agent working"));
-  const team = formatTeamInsights(
-    computeTeamInsights([row({}), row({ id: "s2:0", session_id: "s2", author: "bob" })], null),
-    null,
-  );
-  assert.ok(team.includes("alice") && team.includes("bob"));
 });

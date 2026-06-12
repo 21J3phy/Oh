@@ -99,7 +99,7 @@ Per [ADR 0007](./docs/adr/0007-insights-from-capture-metrics.md): the raw sessio
 - `src/insights.ts` (new) — aggregation + report formatting + the streak detector (shared by `oh insights` and capture's Nudge writer).
 - `src/capture.ts` — upsert Metrics rows alongside chunks (Metrics for *all* exchanges on the first metrics-aware pass — offset state gains `metricsV`; tail-only after); run the detector and write at most one Nudge file per session under `~/.oh/nudges/`.
 - `src/hook.ts` — before spawning capture: if a pending Nudge exists for this `session_id`, print `{"systemMessage": …}` and mark it consumed. Still never blocks.
-- `src/cli.ts` — new `oh insights [--since 7d] [--who NAME | --team] [--repo R]`.
+- `src/cli.ts` — new `oh insights [--since 7d] [--repo R]` — always scoped to the caller's own Sessions (individual-only, [ADR 0008](./docs/adr/0008-insights-wallet-opener-individual-only.md)).
 
 ## Data model (delta)
 
@@ -108,7 +108,7 @@ Per [ADR 0007](./docs/adr/0007-insights-from-capture-metrics.md): the raw sessio
 
 ## Decisions (settled here)
 
-1. **Metrics live in the Team Brain**, not a local store — one store, many Views (ADR 0001); team aggregates need it; token counts are far less sensitive than the reasoning text already shared.
+1. **Metrics live in the Team Brain**, not a local store — one store, many Views (ADR 0001); token counts are far less sensitive than the reasoning text already shared. Display is individual-only ([ADR 0008](./docs/adr/0008-insights-wallet-opener-individual-only.md)); in v0 that's by convention (shared key), enforced by RLS at the hosted tier.
 2. **Tokens, not dollars** — no price table to maintain/go stale.
 3. **Time anatomy thresholds** — think gap ≤ 5 min = "you prompting/thinking"; 5–30 min = "away while agent waited"; > 30 min = excluded (left for the day). Stated in the report footer.
 4. **Rabbit-hole signature** — trailing streak of ≥ 4 exchanges that are corrections or contain tool errors. Deterministic, explainable, tunable later.

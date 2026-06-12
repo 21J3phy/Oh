@@ -22,12 +22,7 @@ import { createDb } from "./db.js";
 import { createEmbedder } from "./embed.js";
 import { captureAll, captureFile } from "./capture.js";
 import { ask, formatAskResult, parseSince } from "./ask.js";
-import {
-  computeInsights,
-  computeTeamInsights,
-  formatInsights,
-  formatTeamInsights,
-} from "./insights.js";
+import { computeInsights, formatInsights } from "./insights.js";
 import { runMcpServer } from "./mcp.js";
 import { runHook } from "./hook.js";
 import { registerAll, installSkill } from "./register.js";
@@ -86,8 +81,8 @@ Usage:
   oh backfill [--since W] Seed the store from your existing Claude+Codex sessions.
   oh ask "<question>"     Query the store from the terminal (--who --repo --since W).
   oh insights             Your last 7 days of vibecoding: time anatomy, tokens,
-                          friction, fun stats (--since W, --repo R, --who NAME,
-                          or --team for per-author aggregates).
+                          friction, fun stats (--since W, --repo R). Always
+                          your own sessions — Insights are individual-only.
   oh status               Show config + how much is in the Team Brain.
 
 Internal (wired by 'oh init'):
@@ -282,26 +277,18 @@ async function cmdAsk(
   console.log(formatAskResult(result));
 }
 
-async function cmdInsights(opts: {
-  since?: string;
-  who?: string;
-  repo?: string;
-  team?: boolean;
-}): Promise<void> {
+async function cmdInsights(opts: { since?: string; repo?: string }): Promise<void> {
   const cfg = loadConfig();
   const { db } = makeClients(cfg);
   const sinceIso = parseSince(opts.since ?? "7d");
-  const author = opts.team ? null : (opts.who ?? cfg.author);
+  // Individual-only by design (ADR 0008): always and only the caller's Sessions.
+  const author = cfg.author;
   const rows = await db.fetchMetrics({
     author,
     repo: opts.repo ?? null,
     since: sinceIso,
   });
-  if (opts.team) {
-    console.log(formatTeamInsights(computeTeamInsights(rows, sinceIso), sinceIso));
-  } else {
-    console.log(formatInsights(computeInsights(rows, { author, sinceIso })));
-  }
+  console.log(formatInsights(computeInsights(rows, { author, sinceIso })));
 }
 
 async function cmdStatus(): Promise<void> {
@@ -350,7 +337,6 @@ async function main(): Promise<void> {
       repos: { type: "string" },
       who: { type: "string" },
       repo: { type: "string" },
-      team: { type: "boolean" },
     },
   });
 
@@ -386,12 +372,7 @@ async function main(): Promise<void> {
       });
       break;
     case "insights":
-      await cmdInsights({
-        since: values.since,
-        who: values.who,
-        repo: values.repo,
-        team: Boolean(values.team),
-      });
+      await cmdInsights({ since: values.since, repo: values.repo });
       break;
     case "capture":
       await cmdCapture({ file: values.file, all: values.all, tool, since: values.since });

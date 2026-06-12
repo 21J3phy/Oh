@@ -2,6 +2,9 @@
 // exchange_metrics rows: time anatomy, token economy, friction, fun stats, and
 // the rabbit-hole detector shared with capture's Nudge writer. No LLM, no
 // embeddings — everything here must stay mechanical and explainable.
+//
+// Individual-only (ADR 0008): reports are always scoped to the caller's own
+// Sessions. Do not add per-author roll-ups or team views here.
 
 import type { MetricsRow } from "./db.js";
 
@@ -70,7 +73,7 @@ export function formatNudge(streak: number, tokens: number): string {
 }
 
 export interface InsightsReport {
-  author: string | null; // null = all authors
+  author: string | null;
   sinceIso: string | null;
   exchanges: number;
   sessions: number;
@@ -218,7 +221,7 @@ function pct(x: number): string {
 }
 
 export function formatInsights(r: InsightsReport): string {
-  const who = r.author ? `${r.author}'s` : "Team";
+  const who = r.author ? `${r.author}'s` : "Your";
   const since = r.sinceIso ? ` since ${r.sinceIso.slice(0, 10)}` : "";
   const lines: string[] = [`${who} vibecoding${since}`, ""];
 
@@ -262,40 +265,5 @@ export function formatInsights(r: InsightsReport): string {
     `(gaps ≤5m count as prompting, 5–30m as away, >30m excluded; ` +
       `tokens are counts, not cost; all from your own captured sessions)`,
   );
-  return lines.join("\n");
-}
-
-/** Per-author rollups for `oh insights --team` — aggregates only, per ADR 0007. */
-export function computeTeamInsights(
-  rows: MetricsRow[],
-  sinceIso: string | null,
-): InsightsReport[] {
-  const byAuthor = new Map<string, MetricsRow[]>();
-  for (const r of rows) {
-    const list = byAuthor.get(r.author);
-    if (list) list.push(r);
-    else byAuthor.set(r.author, [r]);
-  }
-  return [...byAuthor.entries()]
-    .map(([author, list]) => computeInsights(list, { author, sinceIso }))
-    .sort((a, b) => b.workMs - a.workMs);
-}
-
-export function formatTeamInsights(reports: InsightsReport[], sinceIso: string | null): string {
-  if (reports.length === 0) return "No captured exchanges in this window.";
-  const lines = [
-    `Team vibecoding${sinceIso ? ` since ${sinceIso.slice(0, 10)}` : ""} (aggregates only)`,
-    "",
-    "who              sessions  agent-time  prompting  fresh-tokens  cache-hit  rabbit-holes",
-  ];
-  for (const r of reports) {
-    lines.push(
-      `${(r.author ?? "?").padEnd(16)} ${String(r.sessions).padStart(8)}  ` +
-        `${fmtDuration(r.workMs).padStart(10)}  ${fmtDuration(r.promptMs).padStart(9)}  ` +
-        `${fmtTokens(r.inputTokens + r.outputTokens + r.cacheWriteTokens).padStart(12)}  ` +
-        `${(r.cacheHitRate != null ? pct(r.cacheHitRate) : "—").padStart(9)}  ` +
-        `${String(r.rabbitHoleEpisodes).padStart(12)}`,
-    );
-  }
   return lines.join("\n");
 }
