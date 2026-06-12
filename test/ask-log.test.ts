@@ -30,7 +30,6 @@ const row: MatchRow = {
 
 function stubDb(matches: MatchRow[], logged: AskLogEntry[], failLog = false): Db {
   return {
-    raw: null as never,
     upsertSession: async () => {},
     upsertChunks: async () => {},
     upsertMetrics: async () => {},

@@ -52,6 +52,14 @@ export function loadConfig(): Config {
     throw new Error(`Could not parse ${CONFIG_PATH}: ${(err as Error).message}`);
   }
   const cfg = { ...DEFAULTS, ...raw } as Config;
+  if (cfg.mode === "hosted") {
+    // Hosted mode needs no keys — auth lives in the hosted block (ADR 0010).
+    if (!cfg.author) throw new Error("Oh config is missing author. Run `oh login`.");
+    if (!cfg.hosted?.accessToken) {
+      throw new Error("Not logged in to hosted Oh. Run `oh login`.");
+    }
+    return cfg;
+  }
   const missing = REQUIRED_KEYS.filter((k) => !cfg[k]);
   if (missing.length > 0) {
     throw new Error(

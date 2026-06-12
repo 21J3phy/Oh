@@ -27,6 +27,7 @@ import { refreshInsightsCache } from "./brief.js";
 import { runMcpServer } from "./mcp.js";
 import { runHook } from "./hook.js";
 import { registerAll, installSkill } from "./register.js";
+import { bareHostedClient, hostedClient, hostedConfigured } from "./hosted.js";
 import { log } from "./log.js";
 import type { Config, Tool } from "./types.js";
 
@@ -69,9 +70,17 @@ function sinceMsFrom(s: string | undefined): number | null {
   return Number.isNaN(t) ? null : t;
 }
 
-const USAGE = `Oh — shared memory for AI-coding teams.
+const USAGE = `Oh — give your AI a past.
 
-Usage:
+Hosted (no keys — ADR 0010):
+  oh signup [--email E]   Create your hosted Oh account (then confirm via email).
+  oh login [--email E]    Log in; stores your session in ~/.oh.
+  oh team create "<name>" Create a team; prints the invite code for teammates.
+  oh team join <code>     Join a team by invite code.
+  oh team                 Show your team + invite code.
+  (then) oh init --yes    Wire Claude+Codex hooks/MCP/skill, and oh backfill.
+
+Self-host (your own Supabase + OpenAI keys):
   oh init [flags]         Configure ~/.oh, write the schema, wire Claude+Codex
                           (hooks + ask MCP server + ask-why skill). Run with no
                           flags to be prompted, or non-interactively with:
@@ -115,6 +124,31 @@ async function cmdInit(opts: InitOpts): Promise<void> {
   ensureDirs();
   const existing = readPartialConfig();
   const interactive = process.stdin.isTTY === true;
+
+  // Hosted mode: no keys, no schema — login/team already happened; just wire.
+  if (existing.mode === "hosted") {
+    if (!existing.hosted?.teamId) {
+      throw new Error('hosted mode: create/join a team first (`oh team create "<name>"` or `oh team join <code>`)');
+    }
+    const plan = wire(false);
+    for (const c of plan.changed) console.log(`  + ${c}`);
+    for (const s of plan.skipped) console.log(`  · ${s}`);
+    let apply = opts.yes === true;
+    if (!apply && interactive && plan.changed.length > 0) {
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      const a = (await rl.question("\nApply this wiring? (files are backed up first) [y/N] ")).trim().toLowerCase();
+      rl.close();
+      apply = a === "y" || a === "yes";
+    }
+    if (apply && plan.changed.length > 0) {
+      const res = wire(true);
+      console.log("✓ wired:");
+      for (const c of res.changed) console.log(`  + ${c}`);
+      for (const n of res.notes) console.log(`note: ${n}`);
+    }
+    console.log("\nNext: `oh backfill`, then fully restart Claude Code and Codex.");
+    return;
+  }
 
   // Flags win, then existing config; prompt only for the rest, only with a TTY.
   let author = opts.author ?? existing.author ?? "";
@@ -283,6 +317,128 @@ async function cmdAsk(
   console.log(formatAskResult(result));
 }
 
+async function promptHidden(label: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  console.log("(input is echoed in the terminal)");
+  const v = (await rl.question(`${label}: `)).trim();
+  rl.close();
+  return v;
+}
+
+async function resolveAuthor(fallback?: string): Promise<string> {
+  const existing = readPartialConfig().author ?? fallback;
+  if (existing) return existing;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const v = (await rl.question("Your name (attributed to your Sessions): ")).trim();
+  rl.close();
+  if (!v) throw new Error("a display name is required");
+  return v;
+}
+
+async function cmdSignup(opts: { email?: string }): Promise<void> {
+  if (!hostedConfigured()) throw new Error("hosted Oh is not available in this build");
+  const email = opts.email ?? (await promptHidden("Email"));
+  const password = await promptHidden("Choose a password (min 8 chars)");
+  const sb = bareHostedClient();
+  const { data, error } = await sb.auth.signUp({ email, password });
+  if (error) throw new Error(`signup failed: ${error.message}`);
+  if (data.session) {
+    // Email confirmation disabled server-side — session granted immediately.
+    saveHostedSession(email, data.session);
+    console.log("✓ account created and logged in.");
+    console.log('Next: `oh team create "<name>"` or `oh team join <code>`.');
+  } else {
+    console.log("✓ account created. Check your email and click the confirmation link,");
+    console.log("then run `oh login`.");
+  }
+}
+
+function saveHostedSession(
+  email: string,
+  session: { access_token: string; refresh_token: string; user: { id: string } },
+): void {
+  const prev = readPartialConfig().hosted;
+  saveConfig({
+    mode: "hosted",
+    hosted: {
+      ...(prev ?? {}),
+      accessToken: session.access_token,
+      refreshToken: session.refresh_token,
+      userId: session.user.id,
+      email,
+    },
+  });
+}
+
+async function cmdLogin(opts: { email?: string }): Promise<void> {
+  if (!hostedConfigured()) throw new Error("hosted Oh is not available in this build");
+  const email = opts.email ?? (await promptHidden("Email"));
+  const password = await promptHidden("Password");
+  const sb = bareHostedClient();
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error || !data.session) {
+    throw new Error(`login failed: ${error?.message ?? "no session"} (unconfirmed email? check your inbox)`);
+  }
+  saveHostedSession(email, data.session);
+  console.log(`✓ logged in as ${email}`);
+
+  // If you already belong to exactly one team, adopt it silently.
+  const { data: teams } = await sb.rpc("my_teams");
+  const list = (teams ?? []) as Array<{ team_id: string; team_name: string; author_name: string; invite_code: string }>;
+  if (list.length === 1) {
+    const t = list[0]!;
+    saveConfig({ author: t.author_name, hosted: { ...readPartialConfig().hosted!, teamId: t.team_id, inviteCode: t.invite_code } });
+    console.log(`✓ team: ${t.team_name} (invite code: ${t.invite_code})`);
+    console.log("Next: `oh init --yes` to wire Claude/Codex, then `oh backfill`.");
+  } else if (list.length === 0) {
+    console.log('Next: `oh team create "<name>"` or `oh team join <code>`.');
+  } else {
+    console.log(`You belong to ${list.length} teams — pick one with \`oh team join <code>\`.`);
+  }
+}
+
+async function cmdTeam(sub: string | undefined, arg: string | undefined): Promise<void> {
+  const cfg = readPartialConfig();
+  if (cfg.mode !== "hosted" || !cfg.hosted) throw new Error("run `oh login` first");
+  const sb = await hostedClient(cfg as Config);
+
+  if (sub === "create") {
+    if (!arg) throw new Error('usage: oh team create "<team name>"');
+    const author = await resolveAuthor();
+    const { data, error } = await sb.rpc("create_team", { p_name: arg, p_author: author });
+    if (error) throw new Error(`create_team failed: ${error.message}`);
+    const r = data as { team_id: string; invite_code: string };
+    saveConfig({ author, hosted: { ...cfg.hosted, teamId: r.team_id, inviteCode: r.invite_code } });
+    console.log(`✓ team "${arg}" created.`);
+    console.log(`Invite code for teammates: ${r.invite_code}`);
+    console.log("Next: `oh init --yes`, then `oh backfill`.");
+    return;
+  }
+  if (sub === "join") {
+    if (!arg) throw new Error("usage: oh team join <invite-code>");
+    const author = await resolveAuthor();
+    const { data, error } = await sb.rpc("join_team", { p_code: arg, p_author: author });
+    if (error) throw new Error(`join_team failed: ${error.message}`);
+    const r = data as { team_id: string };
+    saveConfig({ author, hosted: { ...cfg.hosted, teamId: r.team_id, inviteCode: arg } });
+    console.log("✓ joined team.");
+    console.log("Next: `oh init --yes`, then `oh backfill`.");
+    return;
+  }
+  // show
+  const { data, error } = await sb.rpc("my_teams");
+  if (error) throw new Error(`my_teams failed: ${error.message}`);
+  const list = (data ?? []) as Array<{ team_id: string; team_name: string; author_name: string; role: string; invite_code: string }>;
+  if (list.length === 0) {
+    console.log('No team yet — `oh team create "<name>"` or `oh team join <code>`.');
+    return;
+  }
+  for (const t of list) {
+    const current = t.team_id === cfg.hosted.teamId ? " (current)" : "";
+    console.log(`${t.team_name}${current} — you are ${t.author_name} (${t.role}); invite code: ${t.invite_code}`);
+  }
+}
+
 async function cmdInsights(opts: { since?: string; repo?: string }): Promise<void> {
   const cfg = loadConfig();
   const { db } = makeClients(cfg);
@@ -299,14 +455,20 @@ async function cmdInsights(opts: { since?: string; repo?: string }): Promise<voi
 
 async function cmdStatus(): Promise<void> {
   const cfg = loadConfig();
-  let host = cfg.supabaseUrl;
+  let host = cfg.supabaseUrl ?? "";
   try {
     host = new URL(cfg.supabaseUrl).host;
   } catch {
     /* keep raw */
   }
   console.log(`author:    ${cfg.author}`);
-  console.log(`supabase:  ${host}`);
+  if (cfg.mode === "hosted") {
+    console.log(`mode:      hosted (${cfg.hosted?.email ?? "?"})`);
+    console.log(`team:      ${cfg.hosted?.teamId ?? "none"} (invite: ${cfg.hosted?.inviteCode ?? "—"})`);
+  } else {
+    console.log(`mode:      self-host`);
+    console.log(`supabase:  ${host}`);
+  }
   console.log(`model:     ${cfg.embeddingModel}`);
   console.log(`thinking:  ${cfg.includeThinking ? "included" : "excluded"}`);
   console.log(`recency:   half-life ${cfg.recencyHalfLifeDays}d, weight ${cfg.recencyWeight}`);
@@ -353,6 +515,7 @@ async function main(): Promise<void> {
       repos: { type: "string" },
       who: { type: "string" },
       repo: { type: "string" },
+      email: { type: "string" },
     },
   });
 
@@ -361,6 +524,15 @@ async function main(): Promise<void> {
   if (values.tool && !tool) throw new Error(`--tool must be "claude" or "codex"`);
 
   switch (cmd) {
+    case "signup":
+      await cmdSignup({ email: values.email });
+      break;
+    case "login":
+      await cmdLogin({ email: values.email });
+      break;
+    case "team":
+      await cmdTeam(positionals[1], positionals.slice(2).join(" ") || undefined);
+      break;
     case "init":
       await cmdInit({
         author: values.author,

@@ -2,8 +2,29 @@
 
 export type Tool = "claude" | "codex";
 
+/** Hosted-mode credentials and tenancy, stored in ~/.oh/config.json. */
+export interface HostedConfig {
+  /** Supabase auth session for the hosted store. Refreshed silently by the CLI. */
+  accessToken: string;
+  refreshToken: string;
+  /** auth.users id — stamped as author_id on every row this machine writes. */
+  userId: string;
+  email: string;
+  /** Current team (tenant). Set by `oh team create` / `oh team join`. */
+  teamId?: string;
+  inviteCode?: string;
+}
+
 /** ~/.oh/config.json — read by every local component. */
 export interface Config {
+  /**
+   * "hosted": Oh-owned store, no keys, auth via `oh login` (ADR 0010).
+   * "selfhost": your own Supabase + OpenAI keys (the original v0 shape).
+   * Absent = selfhost (backwards compatible).
+   */
+  mode?: "hosted" | "selfhost";
+  /** Hosted-mode state. Required when mode === "hosted". */
+  hosted?: HostedConfig;
   /** Display name attributed to this person's Sessions in the Team Brain. */
   author: string;
   /** Shared Supabase project URL. */
