@@ -209,7 +209,12 @@ export function createDb(cfg: Config): Db {
       ]);
       if (total.error) throw new Error(`askStats failed: ${total.error.message}`);
       if (answered.error) throw new Error(`askStats failed: ${answered.error.message}`);
-      return { total: total.count ?? 0, answered: answered.count ?? 0 };
+      // A missing table can yield a silent null count (PostgREST schema-cache
+      // quirk); a real empty table counts 0. Don't report zeros we didn't see.
+      if (total.count == null || answered.count == null) {
+        throw new Error("askStats failed: no count returned (asks table missing?)");
+      }
+      return { total: total.count, answered: answered.count };
     },
 
     async matchChunks(
