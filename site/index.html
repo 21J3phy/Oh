@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oh — the memory layer for AI-coding teams</title>
+<meta name="description" content="Your team's AI sessions hold all the reasoning behind your code — and that memory dies when each session ends. Oh keeps it. Ask why anything was built. See where your week went.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@300;400;500;700;800&family=Newsreader:ital,opsz,wght@1,6..72,300;1,6..72,400;1,6..72,500&family=Spline+Sans+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0d0c09;
+    --ink-2: #131210;
+    --ink-3: #1b1915;
+    --line: #2a2620;
+    --bone: #e9e2d0;
+    --bone-dim: #9a937f;
+    --bone-faint: #5f594b;
+    --phos: #f5b54a;
+    --phos-soft: #d99c35;
+    --phos-glow: rgba(245, 181, 74, 0.14);
+    --cite: #8fb9a8;
+    --you: #c7b9e8;
+    --serif: "Newsreader", Georgia, serif;
+    --mono: "Spline Sans Mono", ui-monospace, monospace;
+    --display: "Martian Mono", ui-monospace, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--phos); color: var(--ink); }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--ink);
+    color: var(--bone);
+    font-family: var(--mono);
+    font-size: 15px;
+    line-height: 1.65;
+    overflow-x: hidden;
+  }
+  /* ---- atmosphere: grain + faint scanlines + vignette ---- */
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 50;
+  }
+  body::after {
+    content: "";
+    position: fixed; inset: 0;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 2px, rgba(0,0,0,0.10) 2px 3px),
+      radial-gradient(ellipse 120% 90% at 50% 0%, transparent 55%, rgba(0,0,0,0.5) 100%);
+    pointer-events: none; z-index: 51;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 28px; position: relative; }
+
+  /* ---- top bar ---- */
+  header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 26px 0 0;
+    animation: rise 0.7s 0.05s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .brand { font-family: var(--display); font-weight: 800; font-size: 19px; letter-spacing: -0.04em; color: var(--bone); text-decoration: none; }
+  .brand .dot { color: var(--phos); }
+  nav { display: flex; gap: 26px; font-size: 12.5px; }
+  nav a { color: var(--bone-dim); text-decoration: none; letter-spacing: 0.04em; }
+  nav a:hover { color: var(--phos); }
+
+  /* ---- hero ---- */
+  .hero { padding: 100px 0 30px; }
+  .sigil {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: clamp(96px, 17vw, 200px);
+    line-height: 0.9;
+    letter-spacing: -0.06em;
+    color: var(--bone);
+    text-shadow: 0 0 60px var(--phos-glow), 0 0 120px var(--phos-glow);
+    animation: rise 0.9s 0.15s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .sigil .dot { color: var(--phos); text-shadow: 0 0 24px rgba(245,181,74,0.65); }
+  .hero .sub {
+    margin-top: 26px;
+    font-family: var(--display); font-weight: 400;
+    font-size: clamp(16px, 2.4vw, 22px);
+    letter-spacing: -0.02em;
+    color: var(--bone);
+    max-width: 30ch; line-height: 1.45;
+    animation: rise 0.9s 0.3s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .hero .sub em { font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--phos); font-size: 1.12em; }
+  .hero .lede {
+    margin-top: 20px; max-width: 56ch; color: var(--bone-dim); font-size: 14.5px;
+    animation: rise 0.9s 0.45s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .cta-row { display: flex; gap: 14px; margin-top: 36px; flex-wrap: wrap; animation: rise 0.9s 0.6s cubic-bezier(.2,.7,.3,1) both; }
+  .btn {
+    display: inline-block; text-decoration: none;
+    font-family: var(--display); font-size: 13px; font-weight: 700; letter-spacing: 0.01em;
+    padding: 14px 22px; border: 1px solid var(--phos); color: var(--ink);
+    background: var(--phos);
+    box-shadow: 0 0 0 0 rgba(245,181,74,0.4);
+    transition: box-shadow .25s, transform .25s, background .25s;
+  }
+  .btn:hover { box-shadow: 0 0 34px 0 rgba(245,181,74,0.35); transform: translateY(-1px); }
+  .btn.ghost { background: transparent; color: var(--phos); }
+  .btn.ghost:hover { background: var(--phos-glow); }
+
+  /* ---- terminal ---- */
+  .term {
+    margin: 64px 0 0;
+    border: 1px solid var(--line);
+    background: linear-gradient(180deg, var(--ink-2), var(--ink-3));
+    box-shadow: 0 30px 80px rgba(0,0,0,0.55), inset 0 0 80px rgba(245,181,74,0.03);
+    animation: rise 0.9s 0.75s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .term-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 11px 16px; border-bottom: 1px solid var(--line);
+    font-size: 11px; color: var(--bone-faint); letter-spacing: 0.06em;
+  }
+  .term-bar .lights { display: flex; gap: 6px; }
+  .term-bar .lights span { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+  .term-bar .lights span:first-child { background: #5a4632; }
+  .term-body { padding: 26px 26px 30px; font-size: 13.5px; min-height: 300px; }
+  .t-line { margin-bottom: 4px; white-space: pre-wrap; word-break: break-word; }
+  .t-prompt { color: var(--phos); }
+  .t-cmd { color: var(--bone); }
+  .t-dim { color: var(--bone-faint); }
+  .t-cite { color: var(--cite); }
+  .t-why {
+    font-family: var(--serif); font-style: italic; font-size: 16.5px; line-height: 1.55;
+    color: var(--bone); padding: 10px 0 10px 18px; margin: 10px 0;
+    border-left: 2px solid var(--phos);
+    text-shadow: 0 0 30px rgba(245,181,74,0.12);
+  }
+  .t-why .who { font-family: var(--mono); font-style: normal; font-size: 11.5px; color: var(--phos-soft); display: block; margin-top: 10px; letter-spacing: 0.05em; }
+  .cursor {
+    display: inline-block; width: 9px; height: 17px; vertical-align: -3px;
+    background: var(--phos); animation: blink 1.05s steps(1) infinite;
+    box-shadow: 0 0 12px rgba(245,181,74,0.6);
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---- sections ---- */
+  section { padding: 110px 0 0; }
+  .kicker {
+    font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--phos-soft); margin-bottom: 22px;
+  }
+  .kicker::before { content: "// "; color: var(--bone-faint); }
+  h2 {
+    font-family: var(--display); font-weight: 700; letter-spacing: -0.03em;
+    font-size: clamp(26px, 4.4vw, 40px); line-height: 1.15; max-width: 24ch;
+  }
+  h2 em { font-family: var(--serif); font-style: italic; font-weight: 400; color: var(--phos); }
+  .prose { margin-top: 22px; max-width: 60ch; color: var(--bone-dim); }
+  .prose strong { color: var(--bone); font-weight: 500; }
+
+  /* problem: the dying memory */
+  .decay {
+    margin-top: 44px; font-family: var(--serif); font-style: italic;
+    font-size: clamp(19px, 3vw, 27px); line-height: 1.6; max-width: 34ch;
+    color: var(--bone);
+  }
+  .decay .fade-word { opacity: var(--o, 1); transition: opacity 1s; }
+
+  /* ---- two offerings ---- */
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 52px; }
+  @media (max-width: 820px) { .duo { grid-template-columns: 1fr; } }
+  .card {
+    border: 1px solid var(--line); background: var(--ink-2);
+    padding: 30px 28px 32px; position: relative; overflow: hidden;
+    transition: border-color .3s, transform .3s;
+  }
+  .card:hover { border-color: var(--phos-soft); transform: translateY(-3px); }
+  .card::before {
+    content: attr(data-n);
+    position: absolute; top: 18px; right: 20px;
+    font-family: var(--display); font-weight: 800; font-size: 13px; color: var(--bone-faint);
+  }
+  .card h3 { font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: -0.02em; margin-bottom: 6px; }
+  .card .tag { font-family: var(--serif); font-style: italic; color: var(--phos); font-size: 16px; margin-bottom: 16px; }
+  .card p { color: var(--bone-dim); font-size: 13.5px; }
+  .card .demo {
+    margin-top: 22px; padding: 16px 16px 18px; background: var(--ink);
+    border: 1px solid var(--line); font-size: 12px; line-height: 1.75; color: var(--bone-dim);
+    white-space: pre-wrap;
+  }
+  .card .demo b { color: var(--bone); font-weight: 500; }
+  .card .demo .a { color: var(--phos); }
+  .card .demo .c { color: var(--cite); }
+  .card .lock { margin-top: 14px; font-size: 11px; color: var(--bone-faint); letter-spacing: 0.04em; }
+  .card .lock b { color: var(--cite); font-weight: 500; }
+
+  /* ---- how ---- */
+  .steps { margin-top: 52px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  @media (max-width: 820px) { .steps { grid-template-columns: 1fr; } }
+  .step { background: var(--ink-2); padding: 28px 26px 30px; }
+  .step .n { font-family: var(--display); font-weight: 800; color: var(--phos); font-size: 13px; }
+  .step h4 { font-family: var(--display); font-weight: 700; font-size: 15px; margin: 12px 0 10px; letter-spacing: -0.01em; }
+  .step p { font-size: 13px; color: var(--bone-dim); }
+  .truth { margin-top: 34px; display: flex; flex-wrap: wrap; gap: 10px 26px; font-size: 12px; color: var(--bone-faint); }
+  .truth span::before { content: "▸ "; color: var(--phos-soft); }
+
+  /* ---- pricing ---- */
+  .tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 52px; align-items: stretch; }
+  @media (max-width: 820px) { .tiers { grid-template-columns: 1fr; } }
+  .tier { border: 1px solid var(--line); background: var(--ink-2); padding: 30px 26px 30px; display: flex; flex-direction: column; transition: border-color .3s, transform .3s; }
+  .tier:hover { transform: translateY(-3px); }
+  .tier.hot { border-color: var(--phos-soft); background: linear-gradient(180deg, rgba(245,181,74,0.05), var(--ink-2) 45%); }
+  .tier h3 { font-family: var(--display); font-size: 13px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--bone-dim); }
+  .tier.hot h3 { color: var(--phos); }
+  .price { font-family: var(--display); font-weight: 800; font-size: 38px; letter-spacing: -0.04em; margin: 16px 0 2px; }
+  .price small { font-size: 13px; font-weight: 400; color: var(--bone-dim); letter-spacing: 0; }
+  .per { font-size: 12px; color: var(--bone-faint); margin-bottom: 20px; }
+  .tier ul { list-style: none; font-size: 13px; color: var(--bone-dim); flex: 1; }
+  .tier li { padding: 7px 0; border-top: 1px solid var(--line); }
+  .tier li::before { content: "+ "; color: var(--phos-soft); }
+  .tier li.memory { font-family: var(--serif); font-style: italic; font-size: 15px; color: var(--bone); }
+  .tier .btn { margin-top: 24px; text-align: center; }
+  .pricing-note { margin-top: 26px; font-size: 12.5px; color: var(--bone-faint); max-width: 62ch; }
+  .pricing-note em { font-family: var(--serif); color: var(--bone-dim); }
+
+  /* ---- final cta ---- */
+  .outro { padding: 130px 0 60px; text-align: center; }
+  .outro .big {
+    font-family: var(--serif); font-style: italic; font-weight: 300;
+    font-size: clamp(28px, 5vw, 46px); line-height: 1.35; max-width: 26ch; margin: 0 auto;
+  }
+  .outro .big b { color: var(--phos); font-weight: 500; text-shadow: 0 0 40px rgba(245,181,74,0.3); }
+  .outro .cta-row { justify-content: center; }
+  footer {
+    margin-top: 90px; padding: 26px 0 34px; border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+    font-size: 11.5px; color: var(--bone-faint); letter-spacing: 0.03em;
+  }
+
+  /* reveal on scroll */
+  .reveal { opacity: 0; transform: translateY(26px); transition: opacity .8s cubic-bezier(.2,.7,.3,1), transform .8s cubic-bezier(.2,.7,.3,1); }
+  .reveal.in { opacity: 1; transform: none; }
+  @keyframes rise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .reveal { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <a class="brand" href="#">Oh<span class="dot">.</span></a>
+    <nav>
+      <a href="#why">why</a>
+      <a href="#offerings">what</a>
+      <a href="#how">how</a>
+      <a href="#pricing">pricing</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <div class="sigil">Oh<span class="dot">.</span></div>
+    <p class="sub">The memory layer for AI-coding teams — <em>so the why survives.</em></p>
+    <p class="lede">Your team's AI sessions hold all the reasoning behind your code. Today that memory dies when each session ends. Oh captures it across Claude Code and Codex into one shared brain — queryable by your teammates' agents, and reflected back to you.</p>
+    <div class="cta-row">
+      <a class="btn" href="mailto:niravsurabhi@gmail.com?subject=Oh%20waitlist&body=Team%20name%2C%20size%2C%20and%20which%20AI%20coding%20tools%20you%20use%3A">Join the waitlist</a>
+      <a class="btn ghost" href="#how">How it works ↓</a>
+    </div>
+
+    <div class="term" id="term">
+      <div class="term-bar">
+        <div class="lights"><span></span><span></span><span></span></div>
+        <span style="margin-left:8px">claude — your machine, monday morning</span>
+      </div>
+      <div class="term-body" id="termBody"></div>
+    </div>
+  </div>
+
+  <section id="why">
+    <div class="kicker reveal">The problem</div>
+    <h2 class="reveal">The code survives. <em>The reasoning doesn't.</em></h2>
+    <p class="prose reveal">On a team where AI writes most of the code, the bottleneck isn't writing — it's <strong>re-explaining</strong>. Someone ships a PR, and everyone else has to interrupt them: <em>"wait, why does this work this way?"</em> The answer existed, in full, in the author's AI session. Then the session ended.</p>
+    <p class="decay reveal" id="decay">"We chose the queue because <span class="fade-word">retries</span> <span class="fade-word">were</span> <span class="fade-word">poisoning</span> <span class="fade-word">the</span> <span class="fade-word">batch</span> <span class="fade-word">and</span> <span class="fade-word">the</span> <span class="fade-word">vendor</span> <span class="fade-word">limit</span> <span class="fade-word">meant</span> <span class="fade-word">we…</span></p>
+    <p class="prose reveal" style="margin-top:18px">— gone. Unless something remembers.</p>
+  </section>
+
+  <section id="offerings">
+    <div class="kicker reveal">One memory, two offerings</div>
+    <h2 class="reveal">Things your team can do <em>with a memory.</em></h2>
+    <div class="duo">
+      <div class="card reveal" data-n="01">
+        <h3>Shared memory</h3>
+        <div class="tag">Ask their agent, not them.</div>
+        <p>Your agent queries your teammates' reasoning and answers with citations — instead of you interrupting the author to re-explain. Works across tools: Codex can answer from a Claude session, and vice versa.</p>
+        <div class="demo"><b>you:</b> ask why we switched the queue from SQS to Redis
+
+<span class="a">oh:</span> Retries were poisoning the batch — Sam hit the
+vendor rate limit and moved dedup into Redis.
+<span class="c">[Sam · claude · 12 Jun · session 0e20a191]</span></div>
+        <div class="lock">Memory that outlives the session, the tool — <b>even the person</b>.</div>
+      </div>
+      <div class="card reveal" data-n="02">
+        <h3>Insights</h3>
+        <div class="tag">Your week, measured from your own memory.</div>
+        <p>Time anatomy (you prompting vs. the agent working vs. you away), token economy, cache-hit rate, rabbit-hole detection — plus a two-line brief when your first session of the day opens, and a mid-session nudge when you're circling.</p>
+        <div class="demo"><span class="a">Oh — last 24h:</span> <b>1h 5m vibecoding (17m you · 48m agent)
+· 835k fresh tokens.</b>
+Week: 6h 12m across 10 sessions, 1 rabbit hole.
+<span class="c">`oh insights` for detail</span></div>
+        <div class="lock">Visible <b>only to you</b>. No teammate, team, or manager view. Ever.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="kicker reveal">How it works</div>
+    <h2 class="reveal">No daemon. No new editor. <em>No habit change.</em></h2>
+    <div class="steps">
+      <div class="step reveal"><div class="n">01 / capture</div>
+        <h4>Hooks, not watchers</h4>
+        <p>Every time a turn ends in Claude Code or Codex, a detached process reads what's new in the session file. It never blocks your typing.</p>
+      </div>
+      <div class="step reveal"><div class="n">02 / scrub + embed</div>
+        <h4>Reasoning only</h4>
+        <p>Prompts, explanations, and one-line action summaries are embedded into the team brain. File dumps and raw output are dropped; secrets are masked before anything leaves your machine.</p>
+      </div>
+      <div class="step reveal"><div class="n">03 / ask</div>
+        <h4>Cited answers</h4>
+        <p>Any teammate's agent asks in natural language and gets ranked, cited excerpts — recency-boosted, so the <em>current</em> decision wins when plans changed.</p>
+      </div>
+    </div>
+    <div class="truth reveal">
+      <span>raw sessions never leave your machine</span>
+      <span>secrets masked before storage</span>
+      <span>insights are individual-only</span>
+      <span>cross-tool from day one</span>
+    </div>
+  </section>
+
+  <section id="pricing">
+    <div class="kicker reveal">Pricing</div>
+    <h2 class="reveal">Free to remember. <em>Pay to never forget.</em></h2>
+    <div class="tiers">
+      <div class="tier reveal">
+        <h3>Free</h3>
+        <div class="price">$0</div>
+        <div class="per">up to 3 seats</div>
+        <ul>
+          <li class="memory">30 days of memory</li>
+          <li>Everything — ask, insights, brief, nudge</li>
+          <li>Cross-tool capture (Claude + Codex)</li>
+          <li>Secret scrubbing</li>
+        </ul>
+        <a class="btn ghost" href="mailto:niravsurabhi@gmail.com?subject=Oh%20waitlist%20(free)&body=Team%20name%2C%20size%2C%20and%20which%20AI%20coding%20tools%20you%20use%3A">Join the waitlist</a>
+      </div>
+      <div class="tier hot reveal">
+        <h3>Team</h3>
+        <div class="price">$15<small> /seat/mo</small></div>
+        <div class="per">$12 annual · unlimited seats</div>
+        <ul>
+          <li class="memory">Memory that never expires</li>
+          <li>Full history backfill</li>
+          <li>Everything in Free</li>
+          <li>Priority support</li>
+        </ul>
+        <a class="btn" href="mailto:niravsurabhi@gmail.com?subject=Oh%20waitlist%20(team)&body=Team%20name%2C%20size%2C%20and%20which%20AI%20coding%20tools%20you%20use%3A">Join the waitlist</a>
+      </div>
+      <div class="tier reveal">
+        <h3>Enterprise</h3>
+        <div class="price"><small style="font-size:22px">let's talk</small></div>
+        <div class="per">when you're ready</div>
+        <ul>
+          <li class="memory">Custom retention &amp; residency</li>
+          <li>SSO, audit, visibility policy</li>
+          <li>Self-host / deploy in your cloud</li>
+        </ul>
+        <a class="btn ghost" href="mailto:niravsurabhi@gmail.com?subject=Oh%20enterprise">Talk to us</a>
+      </div>
+    </div>
+    <p class="pricing-note reveal">The cap is <em>memory, not features</em> — on Free, everything works and then ages out after 30 days. The day an answer you needed has expired, you'll know exactly what you're paying for.</p>
+  </section>
+
+  <div class="outro">
+    <p class="big reveal">Six months from now, someone will look at your code and ask <b>why</b>.<br>Oh will know.</p>
+    <div class="cta-row" style="margin-top:40px">
+      <a class="btn" href="mailto:niravsurabhi@gmail.com?subject=Oh%20waitlist&body=Team%20name%2C%20size%2C%20and%20which%20AI%20coding%20tools%20you%20use%3A">Join the waitlist</a>
+    </div>
+    <footer>
+      <span>Oh — memory that outlives the session.</span>
+      <span>stop re-explaining · ask their agent, not them</span>
+    </footer>
+  </div>
+</div>
+
+<script>
+  // ---- hero terminal: a real ask, replayed ----
+  const SCRIPT = [
+    { t: "prompt", text: "you", rest: "  why is checkout retry wrapped in that weird mutex?" },
+    { t: "dim",    text: "   querying team memory… 3 sessions match", delay: 700 },
+    { t: "why",    text: "Double-submit on slow cards — two retries raced and charged twice. Maya serialized the retry path on purpose; the comment got lost in a rebase.", who: "Maya · codex · 3 weeks ago · session 019e75d2 · sim 0.87", delay: 600 },
+    { t: "dim",    text: "   nobody got interrupted. it took 4 seconds.", delay: 900 },
+  ];
+  const body = document.getElementById("termBody");
+  let li = 0;
+  function typeLine(el, text, cps, done) {
+    let i = 0;
+    (function tick() {
+      el.textContent = text.slice(0, ++i);
+      if (i < text.length) setTimeout(tick, cps + Math.random() * 24);
+      else done && done();
+    })();
+  }
+  function next() {
+    if (li >= SCRIPT.length) {
+      const fin = document.createElement("div");
+      fin.className = "t-line";
+      fin.innerHTML = '<span class="t-prompt">you</span>  <span class="cursor"></span>';
+      body.appendChild(fin);
+      return;
+    }
+    const s = SCRIPT[li++];
+    setTimeout(() => {
+      if (s.t === "prompt") {
+        const line = document.createElement("div");
+        line.className = "t-line";
+        line.innerHTML = '<span class="t-prompt">' + s.text + "</span>  ";
+        const span = document.createElement("span");
+        span.className = "t-cmd";
+        line.appendChild(span);
+        body.appendChild(line);
+        typeLine(span, s.rest.trim(), 34, next);
+      } else if (s.t === "why") {
+        const q = document.createElement("div");
+        q.className = "t-why";
+        body.appendChild(q);
+        typeLine(q, s.text, 14, () => {
+          const who = document.createElement("span");
+          who.className = "who";
+          who.textContent = "[" + s.who + "]";
+          q.appendChild(who);
+          next();
+        });
+      } else {
+        const line = document.createElement("div");
+        line.className = "t-line t-dim";
+        line.textContent = s.text;
+        body.appendChild(line);
+        next();
+      }
+    }, s.delay || 300);
+  }
+  // start when terminal scrolls into view (or immediately if visible)
+  new IntersectionObserver((entries, obs) => {
+    if (entries[0].isIntersecting) { obs.disconnect(); setTimeout(next, 600); }
+  }, { threshold: 0.3 }).observe(document.getElementById("term"));
+
+  // ---- scroll reveals ----
+  const ro = new IntersectionObserver((es) => {
+    es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); ro.unobserve(e.target); } });
+  }, { threshold: 0.12 });
+  document.querySelectorAll(".reveal").forEach((el) => ro.observe(el));
+
+  // ---- memory decay: the quote literally fades as you read it ----
+  const decay = document.getElementById("decay");
+  new IntersectionObserver((es, obs) => {
+    if (!es[0].isIntersecting) return;
+    obs.disconnect();
+    const words = decay.querySelectorAll(".fade-word");
+    words.forEach((w, i) => {
+      setTimeout(() => { w.style.setProperty("--o", String(Math.max(0.06, 1 - (i + 1) * 0.1))); }, 900 + i * 240);
+    });
+  }, { threshold: 0.5 }).observe(decay);
+</script>
+</body>
+</html>
