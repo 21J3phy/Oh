@@ -52,10 +52,11 @@ function findSessionId(payload: unknown): string | null {
 /**
  * If a detached capture flagged this session as circling, show the one-shot
  * Nudge via the hook's `systemMessage` output (warning-style, never blocks)
- * and mark it consumed. Claude-only in v0.1 — Codex has no equivalent surface.
+ * and mark it consumed. Works in Claude and Codex ≥0.13x — both render
+ * systemMessage from hook output.
  */
-function deliverNudge(tool: Tool, sessionId: string | null): void {
-  if (tool !== "claude" || !sessionId) return;
+function deliverNudge(sessionId: string | null): void {
+  if (!sessionId) return;
   const pending = nudgePath(sessionId);
   try {
     if (!existsSync(pending)) return;
@@ -113,7 +114,7 @@ export async function runHook(tool: Tool, cliPath: string): Promise<void> {
     process.exit(0);
   }
 
-  deliverNudge(tool, findSessionId(payload));
+  deliverNudge(findSessionId(payload));
 
   const transcript = findTranscriptPath(payload);
   const args = transcript
