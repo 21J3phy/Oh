@@ -47,6 +47,7 @@ test("registerAll merges into existing configs without clobbering them", () => {
   assert.ok(stopCommands.includes("existing-notify.sh"), "existing hook preserved");
   assert.ok(stopCommands.some((c: string) => c.includes("OH_HOOK=1") && c.includes("--tool claude")));
   assert.ok(settings.hooks.SessionEnd.length >= 1, "SessionEnd hook added");
+  assert.ok(settings.hooks.SessionStart.length >= 1, "SessionStart (brief) hook added");
 
   // Claude MCP: posthog preserved, oh added.
   const cj = JSON.parse(readFileSync(paths.claudeJson, "utf8"));
@@ -75,7 +76,7 @@ test("re-running is idempotent — no duplicates", () => {
   assert.ok(second.skipped.length >= 4);
 
   const settings = readFileSync(paths.claudeSettings, "utf8");
-  assert.equal(occurrences(settings, "OH_HOOK=1"), 2, "one Stop + one SessionEnd, no dupes");
+  assert.equal(occurrences(settings, "OH_HOOK=1"), 3, "Stop + SessionEnd + SessionStart, no dupes");
   const toml = readFileSync(paths.codexConfig, "utf8");
   assert.equal(occurrences(toml, "[mcp_servers.oh]"), 1, "mcp block appended once");
 });
@@ -92,7 +93,7 @@ test("re-registering from a new install path replaces the old hook (no dupes)", 
   const settings = readFileSync(paths.claudeSettings, "utf8");
   assert.ok(settings.includes("/new/place/dist/cli.js"), "new path present");
   assert.ok(!settings.includes("/old/place/dist/cli.js"), "old path removed");
-  assert.equal(occurrences(settings, "OH_HOOK=1"), 2, "still exactly Stop + SessionEnd");
+  assert.equal(occurrences(settings, "OH_HOOK=1"), 3, "still exactly Stop + SessionEnd + SessionStart");
   assert.ok(settings.includes("existing-notify.sh"), "pre-existing hook preserved");
 
   const toml = readFileSync(paths.codexConfig, "utf8");

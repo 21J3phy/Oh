@@ -23,6 +23,7 @@ import { createEmbedder } from "./embed.js";
 import { captureAll, captureFile } from "./capture.js";
 import { ask, formatAskResult, parseSince } from "./ask.js";
 import { computeInsights, formatInsights } from "./insights.js";
+import { refreshInsightsCache } from "./brief.js";
 import { runMcpServer } from "./mcp.js";
 import { runHook } from "./hook.js";
 import { registerAll, installSkill } from "./register.js";
@@ -253,6 +254,11 @@ async function cmdCapture(opts: {
     const tool = opts.tool ?? inferTool(opts.file);
     const r = await captureFile(opts.file, tool, cfg, db, embedder);
     log("capture", `file ${opts.file}: +${r.embedded} chunks (skipped=${r.skipped})`);
+    try {
+      await refreshInsightsCache(cfg, db); // keep the session-start brief warm
+    } catch (err) {
+      log("capture", `insights cache refresh skipped — ${(err as Error).message}`);
+    }
     if (process.stdout.isTTY) {
       console.log(`${tool} ${r.sessionId ?? "?"}: +${r.embedded} chunks (skipped=${r.skipped}).`);
     }
@@ -304,6 +310,7 @@ async function cmdStatus(): Promise<void> {
   console.log(`model:     ${cfg.embeddingModel}`);
   console.log(`thinking:  ${cfg.includeThinking ? "included" : "excluded"}`);
   console.log(`recency:   half-life ${cfg.recencyHalfLifeDays}d, weight ${cfg.recencyWeight}`);
+  console.log(`brief:     ${cfg.brief ?? "daily"} (session-start insights brief)`);
   console.log(
     `projects:  ${cfg.repos && cfg.repos.length > 0 ? cfg.repos.join(", ") : "ALL (no git-project filter)"}`,
   );

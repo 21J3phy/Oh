@@ -176,17 +176,20 @@ export function registerClaude(
   const cmd = hookCommand(node, cli, "claude");
 
   // --- hooks (settings.json) ---
+  // Stop/SessionEnd capture the session; SessionStart shows the daily brief
+  // (same entrypoint — it branches on the payload's hook_event_name).
   const settings = readJson(paths.claudeSettings);
   const addedStop = addHookToConfig(settings, "Stop", cmd);
   const addedEnd = addHookToConfig(settings, "SessionEnd", cmd);
-  if (addedStop || addedEnd) {
+  const addedStart = addHookToConfig(settings, "SessionStart", cmd);
+  if (addedStop || addedEnd || addedStart) {
     if (apply) {
       backup(paths.claudeSettings, result);
       writeJson(paths.claudeSettings, settings);
     }
-    result.changed.push(`${paths.claudeSettings} (capture hook: Stop/SessionEnd)`);
+    result.changed.push(`${paths.claudeSettings} (hooks: Stop/SessionEnd/SessionStart)`);
   } else {
-    result.skipped.push(`${paths.claudeSettings} (capture hook already present)`);
+    result.skipped.push(`${paths.claudeSettings} (hooks already present)`);
   }
 
   // --- MCP server (~/.claude.json) ---

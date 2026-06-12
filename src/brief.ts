@@ -1,0 +1,126 @@
+// The session-start brief: Insights' ambient surface (people forget to run
+// `oh insights`). The detached capture refreshes a small local cache after
+// every sweep; the SessionStart hook renders it in two lines with zero network
+// and zero blocking. Self-only by construction — the cache holds only the
+// configured author's numbers (ADR 0008).
+
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { BRIEF_MARKER_PATH, INSIGHTS_CACHE_PATH, ensureDirs } from "./config.js";
+import { computeInsights, type InsightsReport } from "./insights.js";
+import type { Db } from "./db.js";
+import type { Config } from "./types.js";
+
+/** Don't render a cache older than this — better silence than stale numbers. */
+const CACHE_MAX_AGE_MS = 26 * 3_600_000;
+
+export interface InsightsCache {
+  updatedAt: string;
+  author: string;
+  day: InsightsReport; // last 24h
+  week: InsightsReport; // last 7d
+}
+
+/**
+ * Recompute the cache from the Team Brain. Called from `oh capture` (the
+ * detached post-turn process), so its latency and failures never touch a turn;
+ * callers swallow errors (offline is fine — the brief just goes quiet).
+ */
+export async function refreshInsightsCache(cfg: Config, db: Db): Promise<void> {
+  const now = Date.now();
+  const weekIso = new Date(now - 7 * 86_400_000).toISOString();
+  const dayIso = new Date(now - 86_400_000).toISOString();
+  const rows = await db.fetchMetrics({ author: cfg.author, since: weekIso });
+  const cache: InsightsCache = {
+    updatedAt: new Date(now).toISOString(),
+    author: cfg.author,
+    day: computeInsights(rows.filter((r) => r.ts >= dayIso), { author: cfg.author, sinceIso: dayIso }),
+    week: computeInsights(rows, { author: cfg.author, sinceIso: weekIso }),
+  };
+  ensureDirs();
+  writeFileSync(INSIGHTS_CACHE_PATH, JSON.stringify(cache));
+}
+
+export function readInsightsCache(nowMs: number): InsightsCache | null {
+  if (!existsSync(INSIGHTS_CACHE_PATH)) return null;
+  try {
+    const cache = JSON.parse(readFileSync(INSIGHTS_CACHE_PATH, "utf8")) as InsightsCache;
+    const age = nowMs - Date.parse(cache.updatedAt);
+    if (Number.isNaN(age) || age < 0 || age > CACHE_MAX_AGE_MS) return null;
+    return cache;
+  } catch {
+    return null;
+  }
+}
+
+function sameLocalDay(aMs: number, bMs: number): boolean {
+  const a = new Date(aMs);
+  const b = new Date(bMs);
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+/** Cadence gate. "daily" = first session of the local calendar day. */
+export function shouldShowBrief(
+  cadence: Config["brief"],
+  lastShownMs: number | null,
+  nowMs: number,
+): boolean {
+  if (cadence === "off") return false;
+  if (cadence === "session") return true;
+  return lastShownMs == null || !sameLocalDay(lastShownMs, nowMs); // "daily" (default)
+}
+
+export function readBriefMarker(): number | null {
+  if (!existsSync(BRIEF_MARKER_PATH)) return null;
+  const t = Date.parse(readFileSync(BRIEF_MARKER_PATH, "utf8").trim());
+  return Number.isNaN(t) ? null : t;
+}
+
+export function writeBriefMarker(nowMs: number): void {
+  ensureDirs();
+  writeFileSync(BRIEF_MARKER_PATH, new Date(nowMs).toISOString());
+}
+
+function fmtDuration(msTotal: number): string {
+  const mins = Math.round(msTotal / 60_000);
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  return `${h}h ${mins % 60}m`;
+}
+
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
+  return String(n);
+}
+
+/** Two lines max. Null = nothing worth saying (don't show an empty brief). */
+export function formatBrief(cache: InsightsCache): string | null {
+  const d = cache.day;
+  const w = cache.week;
+  if (w.exchanges === 0) return null;
+
+  const lines: string[] = [];
+  if (d.exchanges > 0) {
+    const wall = d.promptMs + d.awayMs + d.workMs;
+    const fresh = d.inputTokens + d.outputTokens + d.cacheWriteTokens;
+    const parts = [
+      `${fmtDuration(wall)} vibecoding (${fmtDuration(d.promptMs)} you · ${fmtDuration(d.workMs)} agent)`,
+      `${fmtTokens(fresh)} fresh tokens`,
+    ];
+    if (d.rabbitHoleEpisodes > 0) {
+      parts.push(`${d.rabbitHoleEpisodes} rabbit hole${d.rabbitHoleEpisodes === 1 ? "" : "s"}`);
+    }
+    lines.push(`Oh — last 24h: ${parts.join(" · ")}.`);
+  }
+  const weekWall = w.promptMs + w.awayMs + w.workMs;
+  lines.push(
+    `Week: ${fmtDuration(weekWall)} across ${w.sessions} session${w.sessions === 1 ? "" : "s"}` +
+      (w.rabbitHoleEpisodes > 0 ? `, ${w.rabbitHoleEpisodes} rabbit hole${w.rabbitHoleEpisodes === 1 ? "" : "s"}` : "") +
+      `. \`oh insights\` for detail.`,
+  );
+  return lines.join("\n");
+}
