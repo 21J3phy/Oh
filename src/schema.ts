@@ -65,6 +65,23 @@ create index if not exists exchange_metrics_author_ts_idx  on exchange_metrics (
 create index if not exists exchange_metrics_repo_ts_idx    on exchange_metrics (repo, ts desc);
 create index if not exists exchange_metrics_session_idx    on exchange_metrics (session_id);
 
+-- Every ask, logged (ADR 0008). An answered ask is a deflected interruption —
+-- the retention metric AND the future first line of the sales pitch are the
+-- same number. Question text is scrubbed before it lands.
+create table if not exists asks (
+  id             text primary key,
+  author         text not null,       -- who asked
+  question       text not null,
+  repo_filter    text,
+  who_filter     text,
+  hits           int not null default 0,
+  top_similarity double precision,
+  ts             timestamptz not null
+);
+
+create index if not exists asks_ts_idx     on asks (ts desc);
+create index if not exists asks_author_idx on asks (author);
+
 -- Top-N similarity search with optional who/repo/since filters. The recency
 -- re-rank (similarity + lambda*recency) happens client-side over these rows.
 create or replace function match_chunks(

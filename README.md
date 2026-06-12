@@ -185,7 +185,10 @@ sessions — there is no teammate, team, or manager view
   team *reversed* across Sessions — it should surface the *current* one. Repeat
   from both Claude and Codex (proves cross-tool access).
 - The real metric is **retention**: do teammates reach for `ask` unprompted in
-  week 3?
+  week 3? It's measured now — every ask is logged, and `oh status` shows
+  "N interruptions deflected" for the last 7 days (existing stores: paste
+  `migrations/0003_asks.sql` once). Kill-tests live in
+  [`startup-plan.md`](./startup-plan.md).
 
 ## Not in v0 (deferred)
 

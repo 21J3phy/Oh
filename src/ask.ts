@@ -6,6 +6,8 @@
 import type { AskHit, Config } from "./types.js";
 import type { Db, MatchFilters, MatchRow } from "./db.js";
 import type { Embedder } from "./embed.js";
+import { scrubText } from "./scrub.js";
+import { log } from "./log.js";
 
 const CANDIDATES = 30;
 const TOP_K = 8;
@@ -83,6 +85,19 @@ export async function ask(
   };
   const rows = await db.matchChunks(embedding, CANDIDATES, filters);
   const hits = rerank(rows, cfg, Date.now()).slice(0, TOP_K);
+
+  // Deflection instrumentation (ADR 0008): every ask is logged; an answered
+  // ask is an interruption Oh absorbed. Must never break the answer itself.
+  void db
+    .logAsk({
+      author: cfg.author,
+      question: scrubText(question),
+      repoFilter: filters.repo ?? null,
+      whoFilter: params.who?.trim() ? params.who.trim() : null,
+      hits: hits.length,
+      topSimilarity: hits.length > 0 ? hits[0]!.similarity : null,
+    })
+    .catch((err) => log("ask", `logAsk failed (apply migrations/0003_asks.sql?) — ${(err as Error).message}`));
 
   let mostRecentMs: number | null = null;
   for (const h of hits) {
