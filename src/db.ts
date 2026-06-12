@@ -1,7 +1,10 @@
-// Supabase data access — the shared Team Brain. v0 talks to Postgres directly
-// (no backend) using the service-role key from config.
+// Supabase data access — the shared Team Brain. Self-host mode talks to your
+// own Postgres with the service-role key; hosted mode talks to the Oh-owned
+// store with the anon key + user JWT, where RLS enforces tenancy (ADR 0010).
+// Above this layer, capture/ask/insights are mode-agnostic.
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { hostedClient, tenantCols } from "./hosted.js";
 import type { Config, Exchange, SessionMeta, Tool } from "./types.js";
 
 const UPSERT_BATCH = 200;
@@ -71,7 +74,6 @@ export interface AskStats {
 }
 
 export interface Db {
-  raw: SupabaseClient;
   upsertSession(s: SessionMeta): Promise<void>;
   upsertChunks(exchanges: Exchange[], embeddings: number[][]): Promise<void>;
   upsertMetrics(exchanges: Exchange[]): Promise<void>;
@@ -87,14 +89,28 @@ export interface Db {
 }
 
 export function createDb(cfg: Config): Db {
-  const sb = createClient(cfg.supabaseUrl, cfg.supabaseKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  // Hosted mode authenticates lazily (token refresh may rewrite config);
+  // self-host keeps the original direct client.
+  const hosted = cfg.mode === "hosted";
+  let clientPromise: Promise<SupabaseClient> | null = null;
+  const client = (): Promise<SupabaseClient> => {
+    if (!clientPromise) {
+      clientPromise = hosted
+        ? hostedClient(cfg)
+        : Promise.resolve(
+            createClient(cfg.supabaseUrl, cfg.supabaseKey, {
+              auth: { persistSession: false, autoRefreshToken: false },
+            }),
+          );
+    }
+    return clientPromise;
+  };
+  /** Extra columns stamped on every row in hosted mode ({} in self-host). */
+  const tenant = (): Record<string, string> => (hosted ? tenantCols(cfg) : {});
 
   return {
-    raw: sb,
-
     async upsertSession(s: SessionMeta): Promise<void> {
+      const sb = await client();
       const { error } = await sb.from("sessions").upsert(
         {
           id: s.sessionId,
@@ -104,6 +120,7 @@ export function createDb(cfg: Config): Db {
           cwd: s.cwd,
           started_at: s.startedAt,
           last_seen_at: s.lastSeenAt,
+          ...tenant(),
         },
         { onConflict: "id" },
       );
@@ -115,7 +132,9 @@ export function createDb(cfg: Config): Db {
       if (exchanges.length !== embeddings.length) {
         throw new Error("upsertChunks: exchanges/embeddings length mismatch");
       }
+      const sb = await client();
       const rows = exchanges.map((ex, i) => ({
+        ...tenant(),
         id: chunkId(ex.sessionId, ex.index),
         session_id: ex.sessionId,
         author: ex.author,
@@ -137,7 +156,9 @@ export function createDb(cfg: Config): Db {
 
     async upsertMetrics(exchanges: Exchange[]): Promise<void> {
       if (exchanges.length === 0) return;
+      const sb = await client();
       const rows = exchanges.map((ex) => ({
+        ...tenant(),
         id: chunkId(ex.sessionId, ex.index),
         session_id: ex.sessionId,
         author: ex.author,
@@ -168,6 +189,7 @@ export function createDb(cfg: Config): Db {
     },
 
     async fetchMetrics(filters: MatchFilters): Promise<MetricsRow[]> {
+      const sb = await client();
       const PAGE = 1000; // Supabase caps a select at 1000 rows
       const out: MetricsRow[] = [];
       for (let from = 0; ; from += PAGE) {
@@ -189,7 +211,9 @@ export function createDb(cfg: Config): Db {
     },
 
     async logAsk(entry: AskLogEntry): Promise<void> {
+      const sb = await client();
       const { error } = await sb.from("asks").insert({
+        ...tenant(),
         id: crypto.randomUUID(),
         author: entry.author,
         question: entry.question,
@@ -203,6 +227,7 @@ export function createDb(cfg: Config): Db {
     },
 
     async askStats(sinceIso: string): Promise<AskStats> {
+      const sb = await client();
       const [total, answered] = await Promise.all([
         sb.from("asks").select("id", { count: "exact", head: true }).gte("ts", sinceIso),
         sb.from("asks").select("id", { count: "exact", head: true }).gte("ts", sinceIso).gt("hits", 0),
@@ -222,6 +247,7 @@ export function createDb(cfg: Config): Db {
       matchCount: number,
       filters: MatchFilters,
     ): Promise<MatchRow[]> {
+      const sb = await client();
       const { data, error } = await sb.rpc("match_chunks", {
         query_embedding: embedding,
         match_count: matchCount,
@@ -234,6 +260,7 @@ export function createDb(cfg: Config): Db {
     },
 
     async chunkCount(): Promise<number> {
+      const sb = await client();
       const { count, error } = await sb
         .from("chunks")
         .select("*", { count: "exact", head: true });
