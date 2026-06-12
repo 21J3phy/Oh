@@ -44,7 +44,7 @@ All features read the same data. Build the core **once** (the Engine); every fea
 | **Handoff** *(later)* | Human, on demand | A *resumable plan + current state* of a teammate's unfinished work, dropped into the picker's agent. |
 | **Daily Summary / Standup** *(later)* | Automatic, EOD | What each person *shipped*, anchored to merged PRs/commits cross-checked with the Session. Dev sees their own; can add a correction. |
 | **Flags** *(later)* | Automatic, per session | Findings against a ruleset: token waste, secret leakage, process compliance. Visibility = configurable. |
-| **Insights** *(v0.1 — shipped)* | Pull (`oh insights`) + one in-session Nudge | Mechanical reports over capture-time **Metrics**: time anatomy (prompting vs agent working vs away), token economy/cache-hit rate, correction/error streaks (rabbit holes), fun stats. See [ADR 0007](./docs/adr/0007-insights-from-capture-metrics.md). |
+| **Insights** *(v0.1 — shipped)* | Pull (`oh insights`) + one in-session Nudge | Mechanical reports over capture-time **Metrics**: time anatomy (prompting vs agent working vs away), token economy/cache-hit rate, correction/error streaks (rabbit holes), fun stats. **Individual-only** — your own numbers, never a teammate's ([ADR 0008](./docs/adr/0008-insights-wallet-opener-individual-only.md)). See [ADR 0007](./docs/adr/0007-insights-from-capture-metrics.md). |
 
 Ask-why and Handoff are the same retrieval pointed at different times — past vs present. Summaries and Flags are the same retrieval run automatically instead of on demand.
 
@@ -92,12 +92,12 @@ The thinnest thing that solves the founders' own pain, run on their own teams. S
 The first Flags-family View, per [ADR 0007](./docs/adr/0007-insights-from-capture-metrics.md). Design rule: **everything is parsed from files Capture already reads — no new data source, no LLM judging, no extra embedding spend.**
 
 - **Metrics (Engine):** Capture keeps one row per Exchange in `exchange_metrics` (same deterministic `<session>:<index>` id as chunks): `think_ms` (gap from previous Exchange's end to this prompt), `work_ms` (prompt → last agent event), token sums (input / output / cache-read / cache-write — Claude per-message `usage` deduped by message id; Codex cumulative `token_count` diffed per Exchange), tool-call / file-read / file-edit counts, tool-error count, interrupt + correction flags, model. Rows skip the embedding pipeline. Offset state is versioned so the first metrics-aware sweep backfills old sessions without re-embedding.
-- **`oh insights [--since 7d] [--who NAME | --team] [--repo R]` (View):** client-side aggregation —
+- **`oh insights [--since 7d] [--repo R]` (View):** client-side aggregation, **always scoped to your own Sessions** (no `--who`/`--team` — [ADR 0008](./docs/adr/0008-insights-wallet-opener-individual-only.md)) —
   - *Time anatomy:* prompting time (think gaps ≤ 5 min), away time (gaps 5–30 min; longer gaps excluded as "left for the day"), agent working time, wall clock.
   - *Token economy:* totals, cache-hit rate, most expensive Exchange (fresh tokens, not dollars — no price table to go stale).
   - *Friction:* corrections, tool errors, interrupts, rabbit-hole episodes (streaks ≥ 4 of correction/error Exchanges).
   - *Fun:* peak hour, busiest day, longest session.
-  - Defaults: your own numbers; `--team` shows per-author aggregates only.
+  - Always your own numbers — Insights are individual-only.
 - **Rabbit-hole Nudge (Flag):** the detached capture runs the streak detector after upserting; if the *trailing* streak ≥ 4 it writes a one-shot nudge file under `~/.oh/nudges/`; the next Stop hook emits it as a `systemMessage` (never blocks, self-only, once per Session, then marked consumed).
 - **Deferred next:** weekly digest (cron over `oh insights`), duplicate-effort detection (cross-author embedding proximity — needs false-positive tuning), ask-deflection counts, an `insights` MCP tool.
 
