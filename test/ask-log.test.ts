@@ -37,6 +37,7 @@ function stubDb(matches: MatchRow[], logged: AskLogEntry[], failLog = false): Db
     matchChunks: async () => matches,
     chunkCount: async () => 0,
     askStats: async () => ({ total: 0, answered: 0 }),
+    latestChunk: async () => null,
     logAsk: async (e) => {
       if (failLog) throw new Error("no asks table");
       logged.push(e);

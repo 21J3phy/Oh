@@ -53,17 +53,36 @@ test("shouldShowBrief: daily fires once per local day, session always, off never
   assert.equal(shouldShowBrief("off", null, now), false);
 });
 
-test("formatBrief: two lines with day + week, day line dropped when quiet today", () => {
+test("formatBrief: day + week lines, day line dropped when quiet today", () => {
   const r = row({});
   const both = formatBrief(cache([r], [r]))!;
   assert.ok(both.startsWith("Oh — last 24h:"));
   assert.ok(both.includes("Week:"));
-  assert.equal(both.split("\n").length, 2, "two lines max");
+  assert.equal(both.split("\n").length, 2, "two lines without a last-snippet");
   assert.ok(both.includes("oh insights"), "points at the full report");
 
   const weekOnly = formatBrief(cache([], [r]))!;
   assert.ok(!weekOnly.includes("last 24h"), "no day line when nothing happened today");
   assert.ok(weekOnly.includes("Week:"));
+});
+
+test('formatBrief: leads with what you were last working on, verbatim', () => {
+  const r = row({});
+  const c = cache([r], [r]);
+  c.last = { snippet: "fix the hosted invite codes", repo: "Oh", ts: new Date(Date.now() - 2 * 3_600_000).toISOString() };
+  const msg = formatBrief(c, Date.now())!;
+  const first = msg.split("\n")[0]!;
+  assert.ok(first.startsWith('Last on: "fix the hosted invite codes"'), first);
+  assert.ok(first.includes("Oh · 2h ago"), first);
+  assert.equal(msg.split("\n").length, 3, "three lines with the last-snippet");
+});
+
+test("lastSnippet strips the User: prefix and truncates long prompts", async () => {
+  const { lastSnippet } = await import("../src/brief.js");
+  assert.equal(lastSnippet("User: why is the sky blue?\n\nAssistant: …"), "why is the sky blue?");
+  const long = "User: " + "x".repeat(200);
+  assert.equal(lastSnippet(long).length, 90);
+  assert.ok(lastSnippet(long).endsWith("…"));
 });
 
 test("formatBrief: surfaces rabbit holes, returns null on an empty week", () => {

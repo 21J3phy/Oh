@@ -80,6 +80,8 @@ export interface Db {
   fetchMetrics(filters: MatchFilters): Promise<MetricsRow[]>;
   logAsk(entry: AskLogEntry): Promise<void>;
   askStats(sinceIso: string): Promise<AskStats>;
+  /** The author's most recent chunk — the daily brief's "you were last working on". */
+  latestChunk(author: string): Promise<{ text: string; repo: string | null; ts: string } | null>;
   matchChunks(
     embedding: number[],
     matchCount: number,
@@ -240,6 +242,19 @@ export function createDb(cfg: Config): Db {
         throw new Error("askStats failed: no count returned (asks table missing?)");
       }
       return { total: total.count, answered: answered.count };
+    },
+
+    async latestChunk(author: string) {
+      const sb = await client();
+      const { data, error } = await sb
+        .from("chunks")
+        .select("text, repo, ts")
+        .ilike("author", author)
+        .order("ts", { ascending: false })
+        .limit(1);
+      if (error) throw new Error(`latestChunk failed: ${error.message}`);
+      const row = data?.[0] as { text: string; repo: string | null; ts: string } | undefined;
+      return row ?? null;
     },
 
     async matchChunks(

@@ -43,7 +43,7 @@ oh backfill             # give it your past — seeds memory from your existing 
 
 Restart Claude Code and Codex (approve the one-time Codex hook-trust prompt), then try: *"ask what I was working on last week."* Teammates join with the invite code that `oh team` prints.
 
-**Or paste this into Claude Code and let your agent do it:**
+**Or paste this into your agent — Claude Code, Codex, whichever you drive — and let it do the setup:**
 
 > Set up Oh — the memory layer that gives my AI coding agents a past (oh-landing-mu.vercel.app) — on my machine, end to end:
 >
