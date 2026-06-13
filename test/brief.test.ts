@@ -56,14 +56,14 @@ test("shouldShowBrief: session always (default), daily once per local day, off n
 test("formatBrief: day + week lines, day line dropped when quiet today", () => {
   const r = row({});
   const both = formatBrief(cache([r], [r]))!;
-  assert.ok(both.startsWith("Oh — last 24h:"));
-  assert.ok(both.includes("Week:"));
-  assert.equal(both.split("\n").length, 2, "two lines without a last-snippet");
-  assert.ok(both.includes("oh insights"), "points at the full report");
+  assert.ok(both.startsWith("Oh ▸ today"), both);
+  assert.ok(both.includes("week:"));
+  assert.equal(both.split("\n").length, 1, "one line without a last-snippet or tip");
+  assert.equal(both.split("Oh ▸").length, 2, "branded exactly once");
 
   const weekOnly = formatBrief(cache([], [r]))!;
-  assert.ok(!weekOnly.includes("last 24h"), "no day line when nothing happened today");
-  assert.ok(weekOnly.includes("Week:"));
+  assert.ok(!weekOnly.includes("today"), "no day stats when nothing happened today");
+  assert.ok(weekOnly.includes("week:"));
 });
 
 test('formatBrief: leads with what you were last working on, verbatim', () => {
@@ -72,9 +72,13 @@ test('formatBrief: leads with what you were last working on, verbatim', () => {
   c.last = { snippet: "fix the hosted invite codes", repo: "Oh", ts: new Date(Date.now() - 2 * 3_600_000).toISOString() };
   const msg = formatBrief(c, Date.now())!;
   const first = msg.split("\n")[0]!;
-  assert.ok(first.startsWith('Your last session: "fix the hosted invite codes"'), first);
+  assert.ok(first.startsWith('Oh ▸ where you left off: "fix the hosted invite codes"'), first);
   assert.ok(first.includes("Oh · 2h ago"), first);
-  assert.equal(msg.split("\n").length, 3, "three lines with the last-snippet");
+  assert.equal(msg.split("\n").length, 2, "header + stats, no tip set");
+  c.tips = ["that ask cost a lot"];
+  const withTip = formatBrief(c, Date.now())!;
+  assert.equal(withTip.split("\n").length, 3, "header + stats + tip");
+  assert.ok(withTip.includes("tip: that ask cost a lot"));
 });
 
 test("lastSnippet strips the User: prefix and truncates long prompts", async () => {
