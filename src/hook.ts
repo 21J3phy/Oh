@@ -75,6 +75,11 @@ function deliverNudge(sessionId: string | null): void {
  * SessionStart: show the daily brief (Insights' ambient surface — people
  * forget to run `oh insights`). Pure local-cache read, zero network; the
  * cache is kept warm by the detached capture after every turn.
+ *
+ * Delivery quirk (verified against the hooks docs): SessionStart does NOT
+ * display `systemMessage` to the user — stdout/JSON becomes context for the
+ * model instead. So we emit `additionalContext` instructing the agent to
+ * surface the brief at the top of its first reply.
  */
 function deliverBrief(): void {
   try {
@@ -86,8 +91,14 @@ function deliverBrief(): void {
     const message = formatBrief(cache);
     if (!message) return;
     writeBriefMarker(now); // mark before printing — never twice in a day
-    process.stdout.write(JSON.stringify({ systemMessage: message }) + "\n");
-    log("hook", "delivered session-start brief");
+    const instruction =
+      `The user's Oh daily brief is below. Show it to the user VERBATIM (as a short fenced code block) at the very top of your next reply, before anything else, then continue with their request. Do not summarize or reformat it.\n\n${message}`;
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: instruction },
+      }) + "\n",
+    );
+    log("hook", "delivered session-start brief (additionalContext)");
   } catch (err) {
     log("hook", `brief delivery failed — ${(err as Error).message}`, true);
   }
