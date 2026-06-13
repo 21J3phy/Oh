@@ -146,39 +146,50 @@ function ago(tsIso: string, nowMs: number): string {
   return `${Math.round(mins / (24 * 60))}d ago`;
 }
 
-/** Three lines max. Null = nothing worth saying (don't show an empty brief). */
+/**
+ * One unified block, branded exactly once:
+ *
+ *   Oh ▸ where you left off: "…" (repo · 2h ago)
+ *     today 3h 27m (1h 5m you · 2h 3m agent) · 3.0M tokens — week: 8 sessions
+ *     tip: that "ok i think it worked…" ask (Fri 19:47) cost 418k tokens …
+ *
+ * Null = nothing worth saying (don't show an empty brief).
+ */
 export function formatBrief(cache: InsightsCache, nowMs: number = Date.parse(cache.updatedAt)): string | null {
   const d = cache.day;
   const w = cache.week;
   if (w.exchanges === 0) return null;
 
-  const lines: string[] = [];
-  if (cache.last?.snippet) {
-    const where = [cache.last.repo, ago(cache.last.ts, nowMs)].filter(Boolean).join(" · ");
-    lines.push(`Your last session: "${cache.last.snippet}"${where ? ` (${where})` : ""}`);
-  }
+  const statBits: string[] = [];
   if (d.exchanges > 0) {
     const wall = d.promptMs + d.awayMs + d.workMs;
     const fresh = d.inputTokens + d.outputTokens + d.cacheWriteTokens;
-    const parts = [
-      `${fmtDuration(wall)} vibecoding (${fmtDuration(d.promptMs)} you · ${fmtDuration(d.workMs)} agent)`,
-      `${fmtTokens(fresh)} fresh tokens`,
-    ];
-    if (d.rabbitHoleEpisodes > 0) {
-      parts.push(`${d.rabbitHoleEpisodes} rabbit hole${d.rabbitHoleEpisodes === 1 ? "" : "s"}`);
-    }
-    lines.push(`Oh — last 24h: ${parts.join(" · ")}.`);
+    statBits.push(
+      `today ${fmtDuration(wall)} (${fmtDuration(d.promptMs)} you · ${fmtDuration(d.workMs)} agent) · ${fmtTokens(fresh)} tokens` +
+        (d.rabbitHoleEpisodes > 0 ? ` · ${d.rabbitHoleEpisodes} rabbit hole${d.rabbitHoleEpisodes === 1 ? "" : "s"}` : ""),
+    );
   }
   const weekWall = w.promptMs + w.awayMs + w.workMs;
-  lines.push(
-    `Week: ${fmtDuration(weekWall)} across ${w.sessions} session${w.sessions === 1 ? "" : "s"}` +
-      (w.rabbitHoleEpisodes > 0 ? `, ${w.rabbitHoleEpisodes} rabbit hole${w.rabbitHoleEpisodes === 1 ? "" : "s"}` : "") +
-      `. \`oh insights\` for detail.`,
+  statBits.push(
+    `week: ${fmtDuration(weekWall)}, ${w.sessions} session${w.sessions === 1 ? "" : "s"}` +
+      (w.rabbitHoleEpisodes > 0 && d.rabbitHoleEpisodes !== w.rabbitHoleEpisodes
+        ? `, ${w.rabbitHoleEpisodes} rabbit hole${w.rabbitHoleEpisodes === 1 ? "" : "s"}`
+        : ""),
   );
+  const statLine = statBits.join(" — ");
+
+  const lines: string[] = [];
+  if (cache.last?.snippet) {
+    const where = [cache.last.repo, ago(cache.last.ts, nowMs)].filter(Boolean).join(" · ");
+    lines.push(`Oh ▸ where you left off: "${cache.last.snippet}"${where ? ` (${where})` : ""}`);
+    lines.push(`  ${statLine}`);
+  } else {
+    lines.push(`Oh ▸ ${statLine}`);
+  }
   if (cache.tips && cache.tips.length > 0) {
     // Rotate daily so the brief doesn't repeat itself all week.
     const day = Math.floor(nowMs / 86_400_000);
-    lines.push(`Oh tip: ${cache.tips[day % cache.tips.length]}`);
+    lines.push(`  tip: ${cache.tips[day % cache.tips.length]}`);
   }
   return lines.join("\n");
 }

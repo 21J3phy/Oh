@@ -92,7 +92,7 @@ function deliverBrief(): void {
     if (!message) return;
     writeBriefMarker(now); // mark before printing — never twice in a day
     const instruction =
-      `The user's Oh daily brief is below. Show it to the user VERBATIM (as a short fenced code block) at the very top of your next reply, before anything else, then continue with their request. Do not summarize or reformat it.\n\n${message}`;
+      `The user's Oh session brief is below. Show it VERBATIM in a fenced code block at the very top of your next reply, then answer their message directly. Do NOT add any commentary about the brief — no recap of what they were working on, no "want to pick up where you left off?" — they can read it themselves; just proceed with what they asked.\n\n${message}`;
     process.stdout.write(
       JSON.stringify({
         hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: instruction },
