@@ -22,8 +22,8 @@ import { createDb } from "./db.js";
 import { createEmbedder } from "./embed.js";
 import { captureAll, captureFile } from "./capture.js";
 import { ask, formatAskResult, parseSince } from "./ask.js";
-import { computeInsights, formatInsights } from "./insights.js";
-import { refreshInsightsCache } from "./brief.js";
+import { computeInsights, formatInsights, generateTips } from "./insights.js";
+import { readInsightsCache, refreshInsightsCache } from "./brief.js";
 import { runMcpServer } from "./mcp.js";
 import { runHook } from "./hook.js";
 import { registerAll, installSkill } from "./register.js";
@@ -455,6 +455,39 @@ async function cmdInsights(opts: { since?: string; repo?: string }): Promise<voi
     since: sinceIso,
   });
   console.log(formatInsights(computeInsights(rows, { author, sinceIso })));
+  try {
+    const texts = await db.fetchOwnChunkTexts(author, sinceIso ?? new Date(0).toISOString());
+    const tips = generateTips(rows, texts).slice(0, 3);
+    if (tips.length > 0) {
+      console.log("\nOh tips (from your own sessions — only you see these):");
+      tips.forEach((t, i) => console.log(`  ${i + 1}. ${t.text}`));
+    }
+  } catch {
+    // tips are decoration; the report already printed
+  }
+}
+
+/**
+ * Claude Code statusline: a compact, always-visible line at the bottom of the
+ * UI — the surface that needs no message to appear. Pure cache read.
+ */
+function cmdStatusline(): void {
+  const cache = readInsightsCache(Date.now());
+  if (!cache) return; // print nothing — Claude Code shows nothing
+  const d = cache.day;
+  const parts: string[] = [];
+  if (cache.last?.snippet) {
+    const s = cache.last.snippet;
+    parts.push(`last: ${s.length > 48 ? s.slice(0, 47) + "…" : s}`);
+  }
+  if (d.exchanges > 0) {
+    const fresh = d.inputTokens + d.outputTokens + d.cacheWriteTokens;
+    const mins = Math.round((d.promptMs + d.awayMs + d.workMs) / 60_000);
+    const dur = mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h${mins % 60 ? ` ${mins % 60}m` : ""}`;
+    parts.push(`${dur} today`, `${fresh >= 1_000_000 ? (fresh / 1_000_000).toFixed(1) + "M" : Math.round(fresh / 1000) + "k"} tok`);
+    if (d.rabbitHoleEpisodes > 0) parts.push(`${d.rabbitHoleEpisodes} 🕳`);
+  }
+  if (parts.length > 0) console.log(`Oh · ${parts.join(" · ")}`);
 }
 
 async function cmdStatus(): Promise<void> {
@@ -565,6 +598,9 @@ async function main(): Promise<void> {
       break;
     case "insights":
       await cmdInsights({ since: values.since, repo: values.repo });
+      break;
+    case "statusline":
+      cmdStatusline();
       break;
     case "capture":
       await cmdCapture({ file: values.file, all: values.all, tool, since: values.since });

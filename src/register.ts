@@ -192,6 +192,25 @@ export function registerClaude(
     result.skipped.push(`${paths.claudeSettings} (hooks already present)`);
   }
 
+  // --- statusline (settings.json) — visible before the first message ---
+  // Respect an existing statusline: only install ours when none is set, or
+  // when an older Oh install path needs correcting.
+  const desiredStatus = { type: "command", command: `"${node}" "${cli}" statusline` };
+  const cur = settings.statusLine as { command?: string } | undefined;
+  const isOurs = typeof cur?.command === "string" && cur.command.endsWith(" statusline");
+  if (!cur || (isOurs && cur.command !== desiredStatus.command)) {
+    settings.statusLine = desiredStatus;
+    if (apply) {
+      backup(paths.claudeSettings, result);
+      writeJson(paths.claudeSettings, settings);
+    }
+    result.changed.push(`${paths.claudeSettings} (statusLine → oh statusline)`);
+  } else if (!isOurs) {
+    result.skipped.push(`${paths.claudeSettings} (statusLine: kept your existing one)`);
+  } else {
+    result.skipped.push(`${paths.claudeSettings} (statusLine already current)`);
+  }
+
   // --- MCP server (~/.claude.json) ---
   const claudeJson = readJson(paths.claudeJson);
   claudeJson.mcpServers ??= {};
