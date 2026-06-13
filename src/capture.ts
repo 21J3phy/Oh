@@ -13,14 +13,14 @@ import {
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
-import { ensureDirs, NUDGES_DIR, OFFSETS_DIR } from "./config.js";
+import { ensureDirs, LAST_SESSION_PATH, NUDGES_DIR, OFFSETS_DIR } from "./config.js";
 import type { Config, Exchange, ParseResult, SessionMeta, Tool } from "./types.js";
 import { parseClaude } from "./parse/claude.js";
 import { parseCodex } from "./parse/codex.js";
 import { repoFromCwd, toExchanges } from "./normalize.js";
 import { scrubText } from "./scrub.js";
 import { detectRabbitHole, formatNudge } from "./insights.js";
-import { refreshInsightsCache } from "./brief.js";
+import { lastSnippet, refreshInsightsCache, type LastSession } from "./brief.js";
 import type { Db } from "./db.js";
 import type { Embedder } from "./embed.js";
 import { log } from "./log.js";
@@ -144,6 +144,32 @@ export function repoAllowed(cwd: string | null, repos: string[] | undefined): bo
   return repos.some((r) => key.includes(r.trim().toLowerCase()));
 }
 
+/**
+ * Track the newest session this machine has seen, for the brief's "Last on"
+ * line. Prefers the tool's own one-line summary (Claude's ai-title); falls
+ * back to the last exchange's opening prompt. Newest-wins across sweeps.
+ */
+function recordLastSession(parsed: ParseResult, exchanges: Exchange[]): void {
+  const last = exchanges[exchanges.length - 1];
+  if (!last) return;
+  try {
+    const ts = last.metrics.endedAt;
+    if (existsSync(LAST_SESSION_PATH)) {
+      const prev = JSON.parse(readFileSync(LAST_SESSION_PATH, "utf8")) as LastSession;
+      if (Date.parse(prev.ts) >= Date.parse(ts)) return;
+    }
+    const entry: LastSession = {
+      summary: parsed.summary?.trim() || lastSnippet(last.reasoningText),
+      repo: last.repo,
+      ts,
+    };
+    ensureDirs();
+    writeFileSync(LAST_SESSION_PATH, JSON.stringify(entry));
+  } catch {
+    // decoration only — never fail capture over it
+  }
+}
+
 export interface CaptureResult {
   sessionId: string | null;
   tool: Tool;
@@ -254,6 +280,7 @@ export async function captureFile(
   }
 
   maybeWriteNudge(sessionId, exchanges);
+  recordLastSession(parsed, exchanges);
 
   saveState(sessionId, {
     bytes: size,

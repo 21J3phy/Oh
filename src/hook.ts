@@ -84,7 +84,7 @@ function deliverNudge(sessionId: string | null): void {
 function deliverBrief(): void {
   try {
     const now = Date.now();
-    const cadence = readPartialConfig().brief ?? "daily";
+    const cadence = readPartialConfig().brief ?? "session";
     if (!shouldShowBrief(cadence, readBriefMarker(), now)) return;
     const cache = readInsightsCache(now);
     if (!cache) return; // no/stale cache — silence beats wrong numbers

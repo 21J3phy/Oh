@@ -84,6 +84,7 @@ export function parseClaude(content: string): ParseResult {
   const seenUsageIds = new Set<string>();
   let sessionId: string | null = null;
   let cwd: string | null = null;
+  let summary: string | null = null;
 
   for (const line of content.split("\n")) {
     if (!line.trim()) continue;
@@ -98,6 +99,11 @@ export function parseClaude(content: string): ParseResult {
       typeof e.timestamp === "string" ? e.timestamp : new Date(0).toISOString();
     const evCwd: string | undefined = typeof e.cwd === "string" ? e.cwd : undefined;
 
+    if (e.type === "ai-title") {
+      // Claude Code's own one-line conversation summary — the brief's "Last on".
+      if (typeof e.aiTitle === "string" && e.aiTitle.trim()) summary = e.aiTitle.trim();
+      continue;
+    }
     if (e.type === "user") {
       if (e.isMeta || e.isSidechain) continue;
       const c = e.message?.content;
@@ -147,5 +153,5 @@ export function parseClaude(content: string): ParseResult {
     }
   }
 
-  return { tool: "claude", sessionId, cwd, events };
+  return { tool: "claude", sessionId, cwd, summary, events };
 }

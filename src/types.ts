@@ -46,8 +46,8 @@ export interface Config {
   /** Weight (λ) of the recency term relative to cosine similarity in the final score. */
   recencyWeight: number;
   /**
-   * Session-start brief cadence: "daily" (default — first session of the day),
-   * "session" (every session), or "off".
+   * Session-start brief cadence: "session" (default — every new session),
+   * "daily" (first session of the day), or "off".
    */
   brief?: "daily" | "session" | "off";
   /**
@@ -149,6 +149,8 @@ export interface ParseResult {
   sessionId: string | null;
   /** Best-known working directory for the session. */
   cwd: string | null;
+  /** The tool's own one-line conversation summary (Claude's ai-title), if present. */
+  summary?: string | null;
   events: ParsedEvent[];
 }
 
