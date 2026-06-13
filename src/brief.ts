@@ -18,6 +18,14 @@ export interface InsightsCache {
   author: string;
   day: InsightsReport; // last 24h
   week: InsightsReport; // last 7d
+  /** What you were last working on — the opening prompt of your newest exchange, verbatim. */
+  last?: { snippet: string; repo: string | null; ts: string } | null;
+}
+
+/** "fix the hosted invite codes…" from a chunk's "User: …" first line. */
+export function lastSnippet(chunkText: string): string {
+  const firstLine = (chunkText.split("\n")[0] ?? "").replace(/^User:\s*/, "").trim();
+  return firstLine.length > 90 ? `${firstLine.slice(0, 89)}…` : firstLine;
 }
 
 /**
@@ -30,11 +38,19 @@ export async function refreshInsightsCache(cfg: Config, db: Db): Promise<void> {
   const weekIso = new Date(now - 7 * 86_400_000).toISOString();
   const dayIso = new Date(now - 86_400_000).toISOString();
   const rows = await db.fetchMetrics({ author: cfg.author, since: weekIso });
+  let last: InsightsCache["last"] = null;
+  try {
+    const chunk = await db.latestChunk(cfg.author);
+    if (chunk) last = { snippet: lastSnippet(chunk.text), repo: chunk.repo, ts: chunk.ts };
+  } catch {
+    // optional decoration — never block the cache on it
+  }
   const cache: InsightsCache = {
     updatedAt: new Date(now).toISOString(),
     author: cfg.author,
     day: computeInsights(rows.filter((r) => r.ts >= dayIso), { author: cfg.author, sinceIso: dayIso }),
     week: computeInsights(rows, { author: cfg.author, sinceIso: weekIso }),
+    last,
   };
   ensureDirs();
   writeFileSync(INSIGHTS_CACHE_PATH, JSON.stringify(cache));
@@ -97,13 +113,25 @@ function fmtTokens(n: number): string {
   return String(n);
 }
 
-/** Two lines max. Null = nothing worth saying (don't show an empty brief). */
-export function formatBrief(cache: InsightsCache): string | null {
+function ago(tsIso: string, nowMs: number): string {
+  const mins = Math.round((nowMs - Date.parse(tsIso)) / 60_000);
+  if (!Number.isFinite(mins) || mins < 0) return "";
+  if (mins < 60) return `${mins}m ago`;
+  if (mins < 24 * 60) return `${Math.round(mins / 60)}h ago`;
+  return `${Math.round(mins / (24 * 60))}d ago`;
+}
+
+/** Three lines max. Null = nothing worth saying (don't show an empty brief). */
+export function formatBrief(cache: InsightsCache, nowMs: number = Date.parse(cache.updatedAt)): string | null {
   const d = cache.day;
   const w = cache.week;
   if (w.exchanges === 0) return null;
 
   const lines: string[] = [];
+  if (cache.last?.snippet) {
+    const where = [cache.last.repo, ago(cache.last.ts, nowMs)].filter(Boolean).join(" · ");
+    lines.push(`Last on: "${cache.last.snippet}"${where ? ` (${where})` : ""}`);
+  }
   if (d.exchanges > 0) {
     const wall = d.promptMs + d.awayMs + d.workMs;
     const fresh = d.inputTokens + d.outputTokens + d.cacheWriteTokens;
