@@ -203,6 +203,122 @@ export function computeInsights(
   return report;
 }
 
+// ---- Oh Tips — rule-based, personalized, mined from your own metrics --------
+// (no LLM judging — every tip cites the mechanical evidence behind it)
+
+export interface Tip {
+  /** Ranking weight ≈ estimated wasted tokens (or attention). */
+  score: number;
+  text: string;
+}
+
+/** "thanks!", "ok cool", "perfect" — a whole context resend to say goodbye. */
+const PLEASANTRY_RE =
+  /^(ok(ay)?|k|thanks?( you| u)?( so much)?|thx|ty|great|nice( one)?|cool|perfect|awesome|amazing|love (it|this)|lgtm|good (job|work)|well done|sounds good|got it|gotcha)[.!?\s]*$/i;
+
+export function promptOf(chunkText: string): string {
+  return (chunkText.split("\n")[0] ?? "").replace(/^User:\s*/, "").trim();
+}
+
+export function generateTips(
+  rows: MetricsRow[],
+  chunkTexts: Array<{ id: string; text: string }>,
+): Tip[] {
+  const tips: Tip[] = [];
+  if (rows.length === 0) return tips;
+  const fresh = (r: MetricsRow) => r.input_tokens + r.output_tokens + r.cache_write_tokens;
+
+  // 1. Pleasantry-only turns — each one re-sends the whole conversation.
+  const promptById = new Map(chunkTexts.map((c) => [c.id, promptOf(c.text)]));
+  const pleasantries = rows.filter((r) => {
+    const p = promptById.get(r.id);
+    return p != null && p.length > 0 && p.length <= 40 && PLEASANTRY_RE.test(p);
+  });
+  if (pleasantries.length >= 2) {
+    const tok = pleasantries.reduce((s, r) => s + fresh(r), 0);
+    tips.push({
+      score: tok,
+      text:
+        `You sent ${pleasantries.length} "thanks/ok"-only messages (~${fmtTokens(tok)} tokens — ` +
+        `each one re-runs the agent on the whole conversation just to say you're welcome). ` +
+        `Your AI doesn't need closure; fold the kindness into your next real ask.`,
+    });
+  }
+
+  // 2. Rabbit holes — correction/error streaks.
+  const bySession = new Map<string, MetricsRow[]>();
+  for (const r of rows) {
+    const list = bySession.get(r.session_id);
+    if (list) list.push(r);
+    else bySession.set(r.session_id, [r]);
+  }
+  let episodes = 0;
+  let holeTokens = 0;
+  for (const list of bySession.values()) {
+    list.sort((a, b) => a.exchange_index - b.exchange_index);
+    episodes += countRabbitHoleEpisodes(list.map(streakItemFromRow));
+    for (const r of list) if (r.is_correction || r.errors > 0) holeTokens += fresh(r);
+  }
+  if (episodes > 0) {
+    tips.push({
+      score: holeTokens,
+      text:
+        `${episodes} rabbit hole${episodes === 1 ? "" : "s"} this week (~${fmtTokens(holeTokens)} tokens in correction/error turns). ` +
+        `When the third "still broken" lands, /clear and restate the goal with what you've learned — turn 10 is rarely cheaper than a fresh start.`,
+    });
+  }
+
+  // 3. One monster exchange.
+  let top: MetricsRow | null = null;
+  for (const r of rows) if (!top || fresh(r) > fresh(top)) top = r;
+  if (top && fresh(top) >= 300_000) {
+    tips.push({
+      score: fresh(top) / 2,
+      text:
+        `One exchange cost ${fmtTokens(fresh(top))} fresh tokens (${top.repo ?? "?"}, ${top.ts.slice(5, 10)}). ` +
+        `Big pastes and file dumps live rent-free in context for the rest of the session — trim what you paste, or /clear after the heavy lift.`,
+    });
+  }
+
+  // 4. Cache-hit rate — context churn is the silent spend.
+  const input = rows.reduce((s, r) => s + r.input_tokens, 0);
+  const cacheRead = rows.reduce((s, r) => s + r.cache_read_tokens, 0);
+  const cacheWrite = rows.reduce((s, r) => s + r.cache_write_tokens, 0);
+  const denom = input + cacheRead + cacheWrite;
+  if (denom > 1_000_000 && cacheRead / denom < 0.7) {
+    tips.push({
+      score: Math.round(input * 0.3),
+      text:
+        `Cache hit is ${Math.round((cacheRead / denom) * 100)}% — fresh context is ~10× the price of cached. ` +
+        `Long gaps mid-session and frequent restarts re-buy the same context; finish a thread while it's warm.`,
+    });
+  }
+
+  // 5. Interrupting late.
+  const interrupts = rows.filter((r) => r.interrupted).length;
+  if (interrupts >= 3) {
+    tips.push({
+      score: 20_000 * interrupts,
+      text:
+        `${interrupts} interrupts this week. Interrupting is healthy — do it EARLIER: ` +
+        `the tokens spent before you hit Esc are already burned, and a wrong direction rarely fixes itself by turn three.`,
+    });
+  }
+
+  // 6. Corrections outside holes — under-specified first asks.
+  const corrections = rows.filter((r) => r.is_correction).length;
+  if (corrections >= 5) {
+    tips.push({
+      score: 15_000 * corrections,
+      text:
+        `${corrections} corrections this week. Front-load the specifics — paste the exact error, name the file, state the constraint — ` +
+        `and the first answer lands more often than the third.`,
+    });
+  }
+
+  return tips.sort((a, b) => b.score - a.score);
+}
+
 function fmtDuration(msTotal: number): string {
   const mins = Math.round(msTotal / 60_000);
   if (mins < 60) return `${mins}m`;

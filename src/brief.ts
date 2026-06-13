@@ -6,7 +6,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { BRIEF_MARKER_PATH, INSIGHTS_CACHE_PATH, LAST_SESSION_PATH, ensureDirs } from "./config.js";
-import { computeInsights, type InsightsReport } from "./insights.js";
+import { computeInsights, generateTips, type InsightsReport } from "./insights.js";
 import type { Db } from "./db.js";
 import type { Config } from "./types.js";
 
@@ -20,6 +20,8 @@ export interface InsightsCache {
   week: InsightsReport; // last 7d
   /** What you were last working on — the tool's own session summary when available. */
   last?: { snippet: string; repo: string | null; ts: string } | null;
+  /** Oh Tips for the week, best first (rule-based — see generateTips). */
+  tips?: string[];
 }
 
 /** ~/.oh/last-session.json — written by capture (newest session wins). */
@@ -60,12 +62,20 @@ export async function refreshInsightsCache(cfg: Config, db: Db): Promise<void> {
   } catch {
     // optional decoration — never block the cache on it
   }
+  let tips: string[] = [];
+  try {
+    const texts = await db.fetchOwnChunkTexts(cfg.author, weekIso);
+    tips = generateTips(rows, texts).slice(0, 3).map((t) => t.text);
+  } catch {
+    // optional decoration — never block the cache on it
+  }
   const cache: InsightsCache = {
     updatedAt: new Date(now).toISOString(),
     author: cfg.author,
     day: computeInsights(rows.filter((r) => r.ts >= dayIso), { author: cfg.author, sinceIso: dayIso }),
     week: computeInsights(rows, { author: cfg.author, sinceIso: weekIso }),
     last,
+    tips,
   };
   ensureDirs();
   writeFileSync(INSIGHTS_CACHE_PATH, JSON.stringify(cache));
@@ -165,5 +175,8 @@ export function formatBrief(cache: InsightsCache, nowMs: number = Date.parse(cac
       (w.rabbitHoleEpisodes > 0 ? `, ${w.rabbitHoleEpisodes} rabbit hole${w.rabbitHoleEpisodes === 1 ? "" : "s"}` : "") +
       `. \`oh insights\` for detail.`,
   );
+  if (cache.tips && cache.tips.length > 0) {
+    lines.push(`Oh tip: ${cache.tips[0]}`);
+  }
   return lines.join("\n");
 }

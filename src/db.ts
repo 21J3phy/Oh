@@ -82,6 +82,8 @@ export interface Db {
   askStats(sinceIso: string): Promise<AskStats>;
   /** The author's most recent chunk — the daily brief's "you were last working on". */
   latestChunk(author: string): Promise<{ text: string; repo: string | null; ts: string } | null>;
+  /** The author's own chunk texts since a date — joined with metrics by id for Tips. */
+  fetchOwnChunkTexts(author: string, sinceIso: string): Promise<Array<{ id: string; text: string }>>;
   matchChunks(
     embedding: number[],
     matchCount: number,
@@ -255,6 +257,19 @@ export function createDb(cfg: Config): Db {
       if (error) throw new Error(`latestChunk failed: ${error.message}`);
       const row = data?.[0] as { text: string; repo: string | null; ts: string } | undefined;
       return row ?? null;
+    },
+
+    async fetchOwnChunkTexts(author: string, sinceIso: string) {
+      const sb = await client();
+      const { data, error } = await sb
+        .from("chunks")
+        .select("id, text")
+        .ilike("author", author)
+        .gte("ts", sinceIso)
+        .order("ts", { ascending: true })
+        .limit(2000);
+      if (error) throw new Error(`fetchOwnChunkTexts failed: ${error.message}`);
+      return (data ?? []) as Array<{ id: string; text: string }>;
     },
 
     async matchChunks(
