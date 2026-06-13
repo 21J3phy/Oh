@@ -119,9 +119,13 @@ export async function runHook(tool: Tool, cliPath: string): Promise<void> {
     // Malformed/absent payload is fine — we fall back to a sweep below.
   }
 
-  // Session opening: brief only — nothing new to capture yet.
+  // Session opening: brief only — nothing new to capture yet. SessionStart
+  // also fires for resume/clear/compact of EXISTING sessions; delivering there
+  // hands the brief to a mid-conversation model (which won't surface it) and
+  // burns the daily marker — only a genuine startup gets the brief.
   if (eventName(payload) === "SessionStart") {
-    deliverBrief();
+    const source = (payload as Record<string, unknown> | null)?.["source"];
+    if (source === "startup" || source == null) deliverBrief();
     process.exit(0);
   }
 
