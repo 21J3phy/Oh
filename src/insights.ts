@@ -220,6 +220,24 @@ export function promptOf(chunkText: string): string {
   return (chunkText.split("\n")[0] ?? "").replace(/^User:\s*/, "").trim();
 }
 
+function quote(p: string, max = 60): string {
+  const t = p.replace(/\s+/g, " ").trim();
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+}
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** "Tue 14:02" — enough to place the moment without a full timestamp. */
+function when(tsIso: string): string {
+  const d = new Date(tsIso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${WEEKDAYS[d.getDay()]} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/**
+ * Every tip must point at a specific moment, quoting the user's own words —
+ * a generic tip is a fortune cookie; a verbatim one is a mirror.
+ */
 export function generateTips(
   rows: MetricsRow[],
   chunkTexts: Array<{ id: string; text: string }>,
@@ -227,25 +245,26 @@ export function generateTips(
   const tips: Tip[] = [];
   if (rows.length === 0) return tips;
   const fresh = (r: MetricsRow) => r.input_tokens + r.output_tokens + r.cache_write_tokens;
+  const promptById = new Map(chunkTexts.map((c) => [c.id, promptOf(c.text)]));
 
   // 1. Pleasantry-only turns — each one re-sends the whole conversation.
-  const promptById = new Map(chunkTexts.map((c) => [c.id, promptOf(c.text)]));
   const pleasantries = rows.filter((r) => {
     const p = promptById.get(r.id);
     return p != null && p.length > 0 && p.length <= 40 && PLEASANTRY_RE.test(p);
   });
   if (pleasantries.length >= 2) {
     const tok = pleasantries.reduce((s, r) => s + fresh(r), 0);
+    const priciest = pleasantries.reduce((a, b) => (fresh(b) > fresh(a) ? b : a));
     tips.push({
       score: tok,
       text:
-        `You sent ${pleasantries.length} "thanks/ok"-only messages (~${fmtTokens(tok)} tokens — ` +
-        `each one re-runs the agent on the whole conversation just to say you're welcome). ` +
-        `Your AI doesn't need closure; fold the kindness into your next real ask.`,
+        `That "${quote(promptById.get(priciest.id) ?? "thanks")}" on ${when(priciest.ts)} cost ${fmtTokens(fresh(priciest))} tokens — ` +
+        `the agent re-read the whole conversation to hear it. You did that ${pleasantries.length}× this week (~${fmtTokens(tok)}). ` +
+        `Your AI doesn't need closure; fold the thanks into your next real ask.`,
     });
   }
 
-  // 2. Rabbit holes — correction/error streaks.
+  // 2. Rabbit holes — quote the message that started the longest spiral.
   const bySession = new Map<string, MetricsRow[]>();
   for (const r of rows) {
     const list = bySession.get(r.session_id);
@@ -253,30 +272,46 @@ export function generateTips(
     else bySession.set(r.session_id, [r]);
   }
   let episodes = 0;
-  let holeTokens = 0;
+  let longest: { rows: MetricsRow[]; tokens: number } | null = null;
   for (const list of bySession.values()) {
     list.sort((a, b) => a.exchange_index - b.exchange_index);
     episodes += countRabbitHoleEpisodes(list.map(streakItemFromRow));
-    for (const r of list) if (r.is_correction || r.errors > 0) holeTokens += fresh(r);
+    let run: MetricsRow[] = [];
+    for (const r of [...list, null as unknown as MetricsRow]) {
+      if (r && (r.is_correction || r.errors > 0)) {
+        run.push(r);
+      } else {
+        if (run.length >= RABBIT_HOLE_MIN_STREAK) {
+          const tokens = run.reduce((s, x) => s + fresh(x), 0);
+          if (!longest || tokens > longest.tokens) longest = { rows: run, tokens };
+        }
+        run = [];
+      }
+    }
   }
-  if (episodes > 0) {
+  if (episodes > 0 && longest) {
+    const first = longest.rows.find((r) => promptById.get(r.id)) ?? longest.rows[0]!;
+    const p = promptById.get(first.id);
     tips.push({
-      score: holeTokens,
+      score: longest.tokens,
       text:
-        `${episodes} rabbit hole${episodes === 1 ? "" : "s"} this week (~${fmtTokens(holeTokens)} tokens in correction/error turns). ` +
-        `When the third "still broken" lands, /clear and restate the goal with what you've learned — turn 10 is rarely cheaper than a fresh start.`,
+        `${when(first.ts).split(" ")[0]}'s spiral: ${longest.rows.length} correction/error turns ` +
+        `(~${fmtTokens(longest.tokens)} tokens)${p ? `, starting around "${quote(p)}"` : ""}. ` +
+        `On the third "still broken", /clear and restate the goal with what you've learned — turn ${longest.rows.length + 1} is rarely cheaper than a fresh start.`,
     });
   }
 
-  // 3. One monster exchange.
+  // 3. One monster exchange — quote the ask that bought it.
   let top: MetricsRow | null = null;
   for (const r of rows) if (!top || fresh(r) > fresh(top)) top = r;
   if (top && fresh(top) >= 300_000) {
+    const p = promptById.get(top.id);
     tips.push({
       score: fresh(top) / 2,
       text:
-        `One exchange cost ${fmtTokens(fresh(top))} fresh tokens (${top.repo ?? "?"}, ${top.ts.slice(5, 10)}). ` +
-        `Big pastes and file dumps live rent-free in context for the rest of the session — trim what you paste, or /clear after the heavy lift.`,
+        `Your priciest moment this week: ${p ? `"${quote(p)}"` : "one exchange"} (${top.repo ?? "?"} · ${when(top.ts)}) → ` +
+        `${fmtTokens(fresh(top))} fresh tokens in a single turn. Whatever got pasted there stayed in context for the rest of the session — ` +
+        `trim heavy pastes, or /clear after the heavy lift.`,
     });
   }
 
@@ -289,30 +324,33 @@ export function generateTips(
     tips.push({
       score: Math.round(input * 0.3),
       text:
-        `Cache hit is ${Math.round((cacheRead / denom) * 100)}% — fresh context is ~10× the price of cached. ` +
-        `Long gaps mid-session and frequent restarts re-buy the same context; finish a thread while it's warm.`,
+        `Your cache hit is ${Math.round((cacheRead / denom) * 100)}% this week — fresh context costs ~10× cached. ` +
+        `Gaps over ~5 minutes mid-session re-buy the same context; finish a thread while it's warm.`,
     });
   }
 
-  // 5. Interrupting late.
-  const interrupts = rows.filter((r) => r.interrupted).length;
-  if (interrupts >= 3) {
+  // 5. Interrupting late — point at the most recent one.
+  const interrupted = rows.filter((r) => r.interrupted);
+  if (interrupted.length >= 3) {
+    const lastInt = interrupted[interrupted.length - 1]!;
     tips.push({
-      score: 20_000 * interrupts,
+      score: 20_000 * interrupted.length,
       text:
-        `${interrupts} interrupts this week. Interrupting is healthy — do it EARLIER: ` +
-        `the tokens spent before you hit Esc are already burned, and a wrong direction rarely fixes itself by turn three.`,
+        `You hit Esc ${interrupted.length} times this week (latest ${when(lastInt.ts)}). Interrupting is healthy — do it EARLIER: ` +
+        `every token before the Esc is already spent, and a wrong direction rarely fixes itself by turn three.`,
     });
   }
 
-  // 6. Corrections outside holes — under-specified first asks.
-  const corrections = rows.filter((r) => r.is_correction).length;
-  if (corrections >= 5) {
+  // 6. Corrections outside holes — quote the priciest do-over.
+  const corrections = rows.filter((r) => r.is_correction);
+  if (corrections.length >= 5) {
+    const priciest = corrections.reduce((a, b) => (fresh(b) > fresh(a) ? b : a));
+    const p = promptById.get(priciest.id);
     tips.push({
-      score: 15_000 * corrections,
+      score: 15_000 * corrections.length,
       text:
-        `${corrections} corrections this week. Front-load the specifics — paste the exact error, name the file, state the constraint — ` +
-        `and the first answer lands more often than the third.`,
+        `${corrections.length} do-overs this week${p ? ` — like "${quote(p)}" (${when(priciest.ts)})` : ""}. ` +
+        `Front-load the specifics — paste the exact error, name the file, state the constraint — and the first answer lands more often than the third.`,
     });
   }
 
