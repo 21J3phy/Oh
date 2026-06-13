@@ -158,11 +158,11 @@ function recordLastSession(parsed: ParseResult, exchanges: Exchange[]): void {
       const prev = JSON.parse(readFileSync(LAST_SESSION_PATH, "utf8")) as LastSession;
       if (Date.parse(prev.ts) >= Date.parse(ts)) return;
     }
-    const entry: LastSession = {
-      summary: parsed.summary?.trim() || lastSnippet(last.reasoningText),
-      repo: last.repo,
-      ts,
-    };
+    // Prefer the tool's own title; fall back to the last prompt — but don't
+    // let a throwaway ("hi", "test") session steal the where-you-left-off slot.
+    const summary = parsed.summary?.trim() || lastSnippet(last.reasoningText);
+    if (!parsed.summary?.trim() && summary.length < 15) return;
+    const entry: LastSession = { summary, repo: last.repo, ts };
     ensureDirs();
     writeFileSync(LAST_SESSION_PATH, JSON.stringify(entry));
   } catch {
