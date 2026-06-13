@@ -193,6 +193,39 @@
   .card .lock { margin-top: 14px; font-size: 11px; color: var(--bone-faint); letter-spacing: 0.04em; }
   .card .lock b { color: var(--cite); font-weight: 500; }
 
+  /* ---- claude session preview ---- */
+  .session-preview { margin-top: 56px; }
+  .session-preview .cap {
+    font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--bone-faint); margin-bottom: 14px;
+  }
+  .session-preview .cap b { color: var(--phos-soft); font-weight: 500; }
+  .cc-window {
+    border: 1px solid var(--line); background: #0f0e0c;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.55);
+    font-size: 12.5px; line-height: 1.8;
+  }
+  .cc-bar {
+    display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+    border-bottom: 1px solid var(--line); font-size: 11px; color: var(--bone-faint);
+  }
+  .cc-bar .lights { display: flex; gap: 6px; }
+  .cc-bar .lights span { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+  .cc-body { padding: 20px 22px 16px; white-space: pre-wrap; word-break: break-word; color: var(--bone-dim); }
+  .cc-body .u { color: var(--bone); }
+  .cc-body .dot { color: var(--phos); }
+  .cc-brief { color: var(--phos-soft); }
+  .cc-brief .hd { color: var(--phos); font-weight: 500; }
+  .cc-reply { color: var(--bone-dim); }
+  .cc-status {
+    display: flex; gap: 0; padding: 8px 16px; border-top: 1px solid var(--line);
+    font-size: 11px; color: var(--bone-faint); overflow-x: auto; white-space: nowrap;
+  }
+  .cc-status .seg { padding: 0 8px; }
+  .cc-status .seg:first-child { padding-left: 0; }
+  .cc-status .seg + .seg { border-left: 1px solid var(--line); }
+  .cc-status .oh-seg { color: var(--phos-soft); }
+
   /* ---- vs strip ---- */
   .vs {
     margin-top: 56px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 0;
@@ -380,6 +413,25 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
         <div class="lock">Visible <b>only to you</b>. No teammate, team, or manager view. Ever.</div>
       </div>
     </div>
+    <div class="session-preview reveal">
+      <div class="cap">What opening a session actually looks like — <b>real output, founder's machine, 12 Jun</b></div>
+      <div class="cc-window">
+        <div class="cc-bar"><div class="lights"><span></span><span></span><span></span></div><span style="margin-left:8px">claude — ~/Documents/Oh</span></div>
+        <div class="cc-body"><span class="u">&gt; hi</span>
+
+<span class="dot">●</span> <span class="cc-brief"><span class="hd">Oh ▸ where you left off: "Design analytics dashboard for coding insights" (Oh · 6m ago)</span>
+    today 3h 33m (1h 8m you · 2h 6m agent) · 3.0M tokens — week: 3h 33m, 9 sessions
+    tip: Your priciest moment this week: "ok i think it worked. also can you make a prompt
+    for the us…" (Fri 19:47) → 418k fresh tokens in a single turn. Whatever got pasted there
+    stayed in context for the rest of the session — trim heavy pastes, or /clear after.</span>
+
+  <span class="cc-reply">Hi! What would you like to work on?</span></div>
+        <div class="cc-status">
+          <span class="seg">~/Documents/Oh</span><span class="seg">Fable 5</span><span class="seg">ctx:97%</span><span class="seg oh-seg">Oh · 3h 33m today · 3.0M tok</span>
+        </div>
+      </div>
+    </div>
+
     <div class="vs reveal">
       <div class="vs-col theirs">
         <div class="vs-label">memory built into your AI tools</div>
@@ -441,12 +493,16 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
       <pre class="agent-prompt" id="agentPrompt">Set up Oh — the memory layer that gives my AI coding agents a past (oh-landing-mu.vercel.app) — on my machine, end to end:
 
 1. Check Node ≥ 20, then run: npm install -g oh-brain
-2. Ask me for: my email, my display name, and whether I'm CREATING a new team or JOINING one (if joining, ask for the invite code; solo = create a team of one).
+2. Ask me for:
+   - My email
+   - My display name
+   - Whether I'm CREATING a new team or JOINING one (if joining, ask for the invite code; solo = create a team of one)
+   - Any specific git repositories/projects to restrict Oh's capture to (default: capture all projects)
 3. Signup and login are interactive (password + email confirmation), so tell me to run these myself in a terminal and wait for me to confirm I'm done:
      oh signup --email MY_EMAIL    (choose a password, click the link in my inbox — the page it lands on may error; that's fine)
      oh login --email MY_EMAIL
 4. Then run: oh team create "TEAM_NAME" --author "MY_NAME"   (or: oh team join INVITE_CODE --author "MY_NAME")
-5. Run: oh init --yes
+5. Run: oh init --yes (if specific repositories were provided in step 2, append them to the command as --repos "repo1,repo2")
 6. Run: oh backfill   (seeds my memory from my existing Claude/Codex sessions)
 7. Tell me to fully restart Claude Code and Codex (approve the Codex hook-trust prompt), verify with oh status, and show me the invite code from oh team to share with teammates.</pre>
     </div>
