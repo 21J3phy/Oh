@@ -476,10 +476,7 @@ function cmdStatusline(): void {
   if (!cache) return; // print nothing — Claude Code shows nothing
   const d = cache.day;
   const parts: string[] = [];
-  if (cache.last?.snippet) {
-    const s = cache.last.snippet;
-    parts.push(`last: ${s.length > 48 ? s.slice(0, 47) + "…" : s}`);
-  }
+  // No last-worked-on here: the status bar is tight, and the brief carries it.
   if (d.exchanges > 0) {
     const fresh = d.inputTokens + d.outputTokens + d.cacheWriteTokens;
     const mins = Math.round((d.promptMs + d.awayMs + d.workMs) / 60_000);
