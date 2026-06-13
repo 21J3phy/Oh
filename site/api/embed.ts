@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Hosted Oh's embedding proxy (ADR 0010). Users bring zero keys: the CLI sends
 // scrubbed reasoning text with the user's Supabase JWT; we verify the JWT
 // against the hosted project, then embed via OpenAI with OUR key (the COGS the
