@@ -48,10 +48,14 @@ Restart Claude Code and Codex (approve the one-time Codex hook-trust prompt), th
 > Set up Oh — the memory layer that gives my AI coding agents a past (oh-landing-mu.vercel.app) — on my machine, end to end:
 >
 > 1. Check Node ≥ 20, then run: `npm install -g oh-brain`
-> 2. Ask me for: my email, my display name, and whether I'm CREATING a new team or JOINING one (if joining, ask for the invite code; solo = create a team of one).
+> 2. Ask me for:
+>    - My email
+>    - My display name
+>    - Whether I'm CREATING a new team or JOINING one (if joining, ask for the invite code; solo = create a team of one)
+>    - Any specific git repositories/projects to restrict Oh's capture to (default: capture all projects)
 > 3. Signup and login are interactive (password + email confirmation), so tell me to run these myself in a terminal and wait for me to confirm I'm done: `oh signup --email MY_EMAIL` (choose a password, click the link in my inbox — the page it lands on may error; that's fine), then `oh login --email MY_EMAIL`
 > 4. Then run: `oh team create "TEAM_NAME" --author "MY_NAME"` (or: `oh team join INVITE_CODE --author "MY_NAME"`)
-> 5. Run: `oh init --yes`
+> 5. Run: `oh init --yes` (if specific repositories were provided in step 2, append them to the command as `--repos "repo1,repo2"`)
 > 6. Run: `oh backfill`
 > 7. Tell me to fully restart Claude Code and Codex (approve the Codex hook-trust prompt), verify with `oh status`, and show me the invite code from `oh team` to share with teammates.
 
