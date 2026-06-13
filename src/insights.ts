@@ -203,8 +203,15 @@ export function computeInsights(
   return report;
 }
 
-// ---- Oh Tips — rule-based, personalized, mined from your own metrics --------
-// (no LLM judging — every tip cites the mechanical evidence behind it)
+// ---- Oh Tips — the mechanical evidence finder -------------------------------
+// These rules locate the *real* moments worth a tip (the priciest exchange with
+// the user's own quote, the rabbit-hole spiral, the cache-hit number) and phrase
+// a grounded draft line for each. The SessionStart hook hands one draft to the
+// user's OWN running agent to personalize at render — Oh itself makes no LLM
+// call (so it works the same in hosted, keyless mode and costs Oh nothing). If
+// the agent doesn't rewrite it, the grounded draft ships as-is. Either way the
+// thing ADR 0007 rejected — an LLM *judge* of "good principles" — stays out:
+// the agent only rewords facts found here, it never scores the user.
 
 export interface Tip {
   /** Ranking weight ≈ estimated wasted tokens (or attention). */

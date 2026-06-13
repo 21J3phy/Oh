@@ -18,6 +18,7 @@ export const NUDGES_DIR = join(OH_DIR, "nudges");
 export const SCHEMA_OUT_PATH = join(OH_DIR, "schema.sql");
 export const INSIGHTS_CACHE_PATH = join(OH_DIR, "insights-cache.json");
 export const BRIEF_MARKER_PATH = join(OH_DIR, "brief-last-shown");
+export const BRIEF_TIP_INDEX_PATH = join(OH_DIR, "brief-tip-index");
 export const LAST_SESSION_PATH = join(OH_DIR, "last-session.json");
 
 const DEFAULTS = {

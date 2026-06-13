@@ -10,8 +10,10 @@ import {
   formatBrief,
   readBriefMarker,
   readInsightsCache,
+  readTipRotation,
   shouldShowBrief,
   writeBriefMarker,
+  writeTipRotation,
 } from "./brief.js";
 import { readPartialConfig } from "./config.js";
 import type { Tool } from "./types.js";
@@ -88,11 +90,15 @@ function deliverBrief(): void {
     if (!shouldShowBrief(cadence, readBriefMarker(), now)) return;
     const cache = readInsightsCache(now);
     if (!cache) return; // no/stale cache — silence beats wrong numbers
-    const message = formatBrief(cache);
+    const rotation = readTipRotation();
+    const message = formatBrief(cache, now, rotation);
     if (!message) return;
     writeBriefMarker(now); // mark before printing — never twice in a day
+    writeTipRotation(rotation + 1); // advance so the next brief shows a new tip
     const instruction =
-      `The user's Oh session brief is below. Show it VERBATIM in a fenced code block at the very top of your next reply, then answer their message directly. Do NOT add any commentary about the brief — no recap of what they were working on, no "want to pick up where you left off?" — they can read it themselves; just proceed with what they asked.\n\n${message}`;
+      `The user's Oh session brief is below. Render it in a fenced code block at the very top of your next reply, then answer their message directly.\n\n` +
+      `Keep every line EXACTLY as written — EXCEPT the line starting "tip:". That line is a grounded draft; rewrite the text after "tip:" in your own voice: one personal, specific, faintly wry sentence. Use ONLY the numbers and quotes already in the draft — never invent or change a statistic — and don't nag or coach. Keep the "tip:" prefix and leading two-space indent. If there's no "tip:" line, change nothing.\n\n` +
+      `Do NOT add any other commentary about the brief — no recap, no "want to pick up where you left off?" — they can read it themselves; just proceed with what they asked.\n\n${message}`;
     process.stdout.write(
       JSON.stringify({
         hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: instruction },
