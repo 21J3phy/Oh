@@ -155,7 +155,7 @@ export function formatBrief(cache: InsightsCache, nowMs: number = Date.parse(cac
   const lines: string[] = [];
   if (cache.last?.snippet) {
     const where = [cache.last.repo, ago(cache.last.ts, nowMs)].filter(Boolean).join(" · ");
-    lines.push(`Last on: "${cache.last.snippet}"${where ? ` (${where})` : ""}`);
+    lines.push(`Your last session: "${cache.last.snippet}"${where ? ` (${where})` : ""}`);
   }
   if (d.exchanges > 0) {
     const wall = d.promptMs + d.awayMs + d.workMs;
@@ -176,7 +176,9 @@ export function formatBrief(cache: InsightsCache, nowMs: number = Date.parse(cac
       `. \`oh insights\` for detail.`,
   );
   if (cache.tips && cache.tips.length > 0) {
-    lines.push(`Oh tip: ${cache.tips[0]}`);
+    // Rotate daily so the brief doesn't repeat itself all week.
+    const day = Math.floor(nowMs / 86_400_000);
+    lines.push(`Oh tip: ${cache.tips[day % cache.tips.length]}`);
   }
   return lines.join("\n");
 }

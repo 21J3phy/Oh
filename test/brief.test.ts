@@ -72,7 +72,7 @@ test('formatBrief: leads with what you were last working on, verbatim', () => {
   c.last = { snippet: "fix the hosted invite codes", repo: "Oh", ts: new Date(Date.now() - 2 * 3_600_000).toISOString() };
   const msg = formatBrief(c, Date.now())!;
   const first = msg.split("\n")[0]!;
-  assert.ok(first.startsWith('Last on: "fix the hosted invite codes"'), first);
+  assert.ok(first.startsWith('Your last session: "fix the hosted invite codes"'), first);
   assert.ok(first.includes("Oh · 2h ago"), first);
   assert.equal(msg.split("\n").length, 3, "three lines with the last-snippet");
 });
