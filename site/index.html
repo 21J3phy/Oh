@@ -497,12 +497,12 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
    - My email
    - My display name
    - Whether I'm CREATING a new team or JOINING one (if joining, ask for the invite code; solo = create a team of one)
-   - Any specific git repositories/projects to restrict Oh's capture to (default: capture all projects)
+   - If there are other git repositories/projects I want to include (default: only restrict capture to this current project/repository)
 3. Signup and login are interactive (password + email confirmation), so tell me to run these myself in a terminal and wait for me to confirm I'm done:
      oh signup --email MY_EMAIL    (choose a password, click the link in my inbox — the page it lands on may error; that's fine)
      oh login --email MY_EMAIL
 4. Then run: oh team create "TEAM_NAME" --author "MY_NAME"   (or: oh team join INVITE_CODE --author "MY_NAME")
-5. Run: oh init --yes (if specific repositories were provided in step 2, append them to the command as --repos "repo1,repo2")
+5. Run: oh init --yes --repos "CURRENT_REPO" (substituting CURRENT_REPO with this current project's git name like 'org/repo', and appending any other repositories I specified in step 2)
 6. Run: oh backfill   (seeds my memory from my existing Claude/Codex sessions)
 7. Tell me to fully restart Claude Code and Codex (approve the Codex hook-trust prompt), verify with oh status, and show me the invite code from oh team to share with teammates.</pre>
     </div>
