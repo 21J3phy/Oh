@@ -81,6 +81,18 @@ test('formatBrief: leads with what you were last working on, verbatim', () => {
   assert.ok(withTip.includes("tip: that ask cost a lot"));
 });
 
+test("formatBrief: rotation index picks a different tip each render", () => {
+  const r = row({});
+  const c = cache([r], [r]);
+  c.tips = ["tip A", "tip B", "tip C"];
+  const tipOf = (msg: string) => msg.split("\n").find((l) => l.includes("tip:"));
+  // Consecutive rotations cycle through every tip, then wrap.
+  assert.ok(tipOf(formatBrief(c, Date.now(), 0)!)!.includes("tip A"));
+  assert.ok(tipOf(formatBrief(c, Date.now(), 1)!)!.includes("tip B"));
+  assert.ok(tipOf(formatBrief(c, Date.now(), 2)!)!.includes("tip C"));
+  assert.ok(tipOf(formatBrief(c, Date.now(), 3)!)!.includes("tip A"), "wraps around");
+});
+
 test("lastSnippet strips the User: prefix and truncates long prompts", async () => {
   const { lastSnippet } = await import("../src/brief.js");
   assert.equal(lastSnippet("User: why is the sky blue?\n\nAssistant: …"), "why is the sky blue?");

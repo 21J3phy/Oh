@@ -5,7 +5,13 @@
 // configured author's numbers (ADR 0008).
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { BRIEF_MARKER_PATH, INSIGHTS_CACHE_PATH, LAST_SESSION_PATH, ensureDirs } from "./config.js";
+import {
+  BRIEF_MARKER_PATH,
+  BRIEF_TIP_INDEX_PATH,
+  INSIGHTS_CACHE_PATH,
+  LAST_SESSION_PATH,
+  ensureDirs,
+} from "./config.js";
 import { computeInsights, generateTips, type InsightsReport } from "./insights.js";
 import type { Db } from "./db.js";
 import type { Config } from "./types.js";
@@ -20,7 +26,13 @@ export interface InsightsCache {
   week: InsightsReport; // last 7d
   /** What you were last working on — the tool's own session summary when available. */
   last?: { snippet: string; repo: string | null; ts: string } | null;
-  /** Oh Tips for the week, best first (rule-based — see generateTips). */
+  /**
+   * Grounded tip drafts, best first — each carries the real quote/numbers the
+   * mechanical layer found (generateTips). The SessionStart hook hands one to
+   * the user's own running agent to personalize at render, so Oh makes no LLM
+   * call of its own (works the same in hosted, keyless mode). Shown as-is if the
+   * agent doesn't rewrite it.
+   */
   tips?: string[];
 }
 
@@ -65,7 +77,10 @@ export async function refreshInsightsCache(cfg: Config, db: Db): Promise<void> {
   let tips: string[] = [];
   try {
     const texts = await db.fetchOwnChunkTexts(cfg.author, weekIso);
-    tips = generateTips(rows, texts).slice(0, 3).map((t) => t.text);
+    // Mechanically-grounded drafts — the real moments + verbatim quotes. The
+    // hook hands one to the user's own agent to personalize (see InsightsCache).
+    // Keep the full ranked set so the brief can rotate through them.
+    tips = generateTips(rows, texts).map((t) => t.text);
   } catch {
     // optional decoration — never block the cache on it
   }
@@ -125,6 +140,22 @@ export function writeBriefMarker(nowMs: number): void {
   writeFileSync(BRIEF_MARKER_PATH, new Date(nowMs).toISOString());
 }
 
+/**
+ * A monotonically-advancing counter used to pick which tip the brief shows.
+ * Bumped once per actual brief render (not per day) so each session surfaces a
+ * different tip instead of repeating the same one all day.
+ */
+export function readTipRotation(): number {
+  if (!existsSync(BRIEF_TIP_INDEX_PATH)) return 0;
+  const n = Number.parseInt(readFileSync(BRIEF_TIP_INDEX_PATH, "utf8").trim(), 10);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+export function writeTipRotation(n: number): void {
+  ensureDirs();
+  writeFileSync(BRIEF_TIP_INDEX_PATH, String(n));
+}
+
 function fmtDuration(msTotal: number): string {
   const mins = Math.round(msTotal / 60_000);
   if (mins < 60) return `${mins}m`;
@@ -155,7 +186,11 @@ function ago(tsIso: string, nowMs: number): string {
  *
  * Null = nothing worth saying (don't show an empty brief).
  */
-export function formatBrief(cache: InsightsCache, nowMs: number = Date.parse(cache.updatedAt)): string | null {
+export function formatBrief(
+  cache: InsightsCache,
+  nowMs: number = Date.parse(cache.updatedAt),
+  rotation?: number,
+): string | null {
   const d = cache.day;
   const w = cache.week;
   if (w.exchanges === 0) return null;
@@ -187,9 +222,11 @@ export function formatBrief(cache: InsightsCache, nowMs: number = Date.parse(cac
     lines.push(`Oh ▸ ${statLine}`);
   }
   if (cache.tips && cache.tips.length > 0) {
-    // Rotate daily so the brief doesn't repeat itself all week.
-    const day = Math.floor(nowMs / 86_400_000);
-    lines.push(`  tip: ${cache.tips[day % cache.tips.length]}`);
+    // Feature a different grounded draft each render (rotation, advanced per
+    // brief by the caller); the hook asks the user's agent to personalize it.
+    // Fall back to a daily rotation when no counter is supplied.
+    const idx = rotation ?? Math.floor(nowMs / 86_400_000);
+    lines.push(`  tip: ${cache.tips[idx % cache.tips.length]}`);
   }
   return lines.join("\n");
 }
