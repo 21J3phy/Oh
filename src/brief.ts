@@ -5,7 +5,7 @@
 // configured author's numbers (ADR 0008).
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { BRIEF_MARKER_PATH, INSIGHTS_CACHE_PATH, ensureDirs } from "./config.js";
+import { BRIEF_MARKER_PATH, INSIGHTS_CACHE_PATH, LAST_SESSION_PATH, ensureDirs } from "./config.js";
 import { computeInsights, type InsightsReport } from "./insights.js";
 import type { Db } from "./db.js";
 import type { Config } from "./types.js";
@@ -18,8 +18,15 @@ export interface InsightsCache {
   author: string;
   day: InsightsReport; // last 24h
   week: InsightsReport; // last 7d
-  /** What you were last working on — the opening prompt of your newest exchange, verbatim. */
+  /** What you were last working on — the tool's own session summary when available. */
   last?: { snippet: string; repo: string | null; ts: string } | null;
+}
+
+/** ~/.oh/last-session.json — written by capture (newest session wins). */
+export interface LastSession {
+  summary: string;
+  repo: string | null;
+  ts: string;
 }
 
 /** "fix the hosted invite codes…" from a chunk's "User: …" first line. */
@@ -38,10 +45,18 @@ export async function refreshInsightsCache(cfg: Config, db: Db): Promise<void> {
   const weekIso = new Date(now - 7 * 86_400_000).toISOString();
   const dayIso = new Date(now - 86_400_000).toISOString();
   const rows = await db.fetchMetrics({ author: cfg.author, since: weekIso });
+  // "Last on": prefer the local last-session record (carries the tool's own
+  // summary); fall back to the newest chunk's opening prompt from the store.
   let last: InsightsCache["last"] = null;
   try {
-    const chunk = await db.latestChunk(cfg.author);
-    if (chunk) last = { snippet: lastSnippet(chunk.text), repo: chunk.repo, ts: chunk.ts };
+    if (existsSync(LAST_SESSION_PATH)) {
+      const ls = JSON.parse(readFileSync(LAST_SESSION_PATH, "utf8")) as LastSession;
+      if (ls.summary) last = { snippet: ls.summary, repo: ls.repo, ts: ls.ts };
+    }
+    if (!last) {
+      const chunk = await db.latestChunk(cfg.author);
+      if (chunk) last = { snippet: lastSnippet(chunk.text), repo: chunk.repo, ts: chunk.ts };
+    }
   } catch {
     // optional decoration — never block the cache on it
   }
@@ -78,15 +93,15 @@ function sameLocalDay(aMs: number, bMs: number): boolean {
   );
 }
 
-/** Cadence gate. "daily" = first session of the local calendar day. */
+/** Cadence gate. Default "session" = every new session; "daily" = first of the local day. */
 export function shouldShowBrief(
   cadence: Config["brief"],
   lastShownMs: number | null,
   nowMs: number,
 ): boolean {
   if (cadence === "off") return false;
-  if (cadence === "session") return true;
-  return lastShownMs == null || !sameLocalDay(lastShownMs, nowMs); // "daily" (default)
+  if (cadence === "daily") return lastShownMs == null || !sameLocalDay(lastShownMs, nowMs);
+  return true; // "session" (default)
 }
 
 export function readBriefMarker(): number | null {

@@ -174,10 +174,11 @@ embedding cost). Two surfaces use it:
   correction/error turns, the next turn ends with a one-line note ("9 turns
   circling, ~80k tokens — a fresh start is often cheaper"). At most once per
   session, visible only to you.
-- **The daily brief** — your first session of the day (Claude or Codex) opens
-  with two lines: yesterday's time/token anatomy and the week so far. Rendered
-  from a local cache (zero startup latency, works offline-quiet). Tune with
-  `"brief": "daily" | "session" | "off"` in `~/.oh/config.json`.
+- **The brief** — every new session (Claude or Codex) opens with three lines:
+  what you were last working on (the tool's own session summary), yesterday's
+  time/token anatomy, and the week so far. Rendered from a local cache (zero
+  startup latency, works offline-quiet). Tune with
+  `"brief": "session" | "daily" | "off"` in `~/.oh/config.json`.
 
 Insights are **individual-only**: `oh insights` always reports your own
 sessions — there is no teammate, team, or manager view

@@ -40,7 +40,7 @@ function cache(dayRows: MetricsRow[], weekRows: MetricsRow[]): InsightsCache {
   };
 }
 
-test("shouldShowBrief: daily fires once per local day, session always, off never", () => {
+test("shouldShowBrief: session always (default), daily once per local day, off never", () => {
   const now = new Date("2026-06-12T15:00:00").getTime();
   const earlierToday = new Date("2026-06-12T08:00:00").getTime();
   const yesterday = new Date("2026-06-11T23:00:00").getTime();
@@ -48,7 +48,7 @@ test("shouldShowBrief: daily fires once per local day, session always, off never
   assert.equal(shouldShowBrief("daily", null, now), true, "no marker → show");
   assert.equal(shouldShowBrief("daily", yesterday, now), true, "last shown yesterday → show");
   assert.equal(shouldShowBrief("daily", earlierToday, now), false, "already shown today → quiet");
-  assert.equal(shouldShowBrief(undefined, earlierToday, now), false, "default is daily");
+  assert.equal(shouldShowBrief(undefined, earlierToday, now), true, "default is every session");
   assert.equal(shouldShowBrief("session", earlierToday, now), true);
   assert.equal(shouldShowBrief("off", null, now), false);
 });
