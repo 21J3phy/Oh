@@ -26,7 +26,7 @@ import { createEmbedder } from "./embed.js";
 import { captureAll, captureFile } from "./capture.js";
 import { ask, formatAskResult, parseSince } from "./ask.js";
 import { computeInsights, formatInsights, generateTips } from "./insights.js";
-import { readInsightsCache, refreshInsightsCache } from "./brief.js";
+import { formatDailyHistory, readInsightsCache, refreshInsightsCache } from "./brief.js";
 import { runMcpServer } from "./mcp.js";
 import { runHook } from "./hook.js";
 import { registerAll, installSkill } from "./register.js";
@@ -452,7 +452,14 @@ async function cmdTeam(
   }
 }
 
-async function cmdInsights(opts: { since?: string; repo?: string }): Promise<void> {
+async function cmdInsights(opts: { since?: string; repo?: string; history?: boolean }): Promise<void> {
+  if (opts.history) {
+    // Saved per-day totals — survives the day rolling over (the live report and
+    // the brief only cover today + this week).
+    console.log("Daily history (local days — only you see these):\n");
+    console.log(formatDailyHistory());
+    return;
+  }
   const cfg = loadConfig();
   const { db } = makeClients(cfg);
   const sinceIso = parseSince(opts.since ?? "7d");
@@ -579,6 +586,7 @@ async function main(): Promise<void> {
       who: { type: "string" },
       repo: { type: "string" },
       email: { type: "string" },
+      history: { type: "boolean" },
     },
   });
 
@@ -623,7 +631,7 @@ async function main(): Promise<void> {
       });
       break;
     case "insights":
-      await cmdInsights({ since: values.since, repo: values.repo });
+      await cmdInsights({ since: values.since, repo: values.repo, history: values.history });
       break;
     case "statusline":
       cmdStatusline();

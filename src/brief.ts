@@ -8,12 +8,13 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import {
   BRIEF_MARKER_PATH,
   BRIEF_TIP_INDEX_PATH,
+  DAILY_HISTORY_PATH,
   INSIGHTS_CACHE_PATH,
   LAST_SESSION_PATH,
   ensureDirs,
 } from "./config.js";
 import { computeInsights, generateTips, type InsightsReport } from "./insights.js";
-import type { Db } from "./db.js";
+import type { Db, MetricsRow } from "./db.js";
 import type { Config } from "./types.js";
 
 /** Don't render a cache older than this — better silence than stale numbers. */
@@ -43,6 +44,75 @@ export interface LastSession {
   ts: string;
 }
 
+/** One frozen day in ~/.oh/insights-daily.json (compact subset of a report). */
+export interface DailyStat {
+  date: string; // local YYYY-MM-DD
+  promptMs: number;
+  awayMs: number;
+  workMs: number;
+  exchanges: number;
+  sessions: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheWriteTokens: number;
+}
+
+/** Map of local YYYY-MM-DD → that day's totals (the on-disk shape). */
+export type DailyHistory = Record<string, DailyStat>;
+
+function localDayKey(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function readRawDailyHistory(): DailyHistory {
+  if (!existsSync(DAILY_HISTORY_PATH)) return {};
+  try {
+    return JSON.parse(readFileSync(DAILY_HISTORY_PATH, "utf8")) as DailyHistory;
+  } catch {
+    return {};
+  }
+}
+
+/** Past days first → today last. The public read for `oh insights --history`. */
+export function readDailyHistory(): DailyStat[] {
+  return Object.values(readRawDailyHistory()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * Bucket the fetched rows by local calendar day and merge each day's totals into
+ * the on-disk history. Upsert (not append): re-running over the same window just
+ * rewrites those days, so frequent refreshes are idempotent and self-healing.
+ */
+function persistDailyHistory(rows: MetricsRow[], author: string): void {
+  const history = readRawDailyHistory();
+  const byDay = new Map<string, MetricsRow[]>();
+  for (const r of rows) {
+    const t = Date.parse(r.ts);
+    if (Number.isNaN(t)) continue;
+    const key = localDayKey(t);
+    const list = byDay.get(key);
+    if (list) list.push(r);
+    else byDay.set(key, [r]);
+  }
+  for (const [date, dayRows] of byDay) {
+    const rep = computeInsights(dayRows, { author });
+    history[date] = {
+      date,
+      promptMs: rep.promptMs,
+      awayMs: rep.awayMs,
+      workMs: rep.workMs,
+      exchanges: rep.exchanges,
+      sessions: rep.sessions,
+      inputTokens: rep.inputTokens,
+      outputTokens: rep.outputTokens,
+      cacheWriteTokens: rep.cacheWriteTokens,
+    };
+  }
+  ensureDirs();
+  writeFileSync(DAILY_HISTORY_PATH, JSON.stringify(history));
+}
+
 /** "fix the hosted invite codes…" from a chunk's "User: …" first line. */
 export function lastSnippet(chunkText: string): string {
   const firstLine = (chunkText.split("\n")[0] ?? "").replace(/^User:\s*/, "").trim();
@@ -57,8 +127,16 @@ export function lastSnippet(chunkText: string): string {
 export async function refreshInsightsCache(cfg: Config, db: Db): Promise<void> {
   const now = Date.now();
   const weekIso = new Date(now - 7 * 86_400_000).toISOString();
-  const dayIso = new Date(now - 86_400_000).toISOString();
+  // "Today" means the local calendar day — resets at local midnight, not a
+  // rolling 24h lookback (else last night's session bleeds into this morning).
+  const dayStart = new Date(now);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayIso = dayStart.toISOString();
   const rows = await db.fetchMetrics({ author: cfg.author, since: weekIso });
+  // Freeze each day's totals to disk before the day rolls over (the cache only
+  // ever holds today + this week). Recomputing the fetched window self-heals
+  // gaps; days that age out of the window stay as last written.
+  persistDailyHistory(rows, cfg.author);
   // "Last on": prefer the local last-session record (carries the tool's own
   // summary); fall back to the newest chunk's opening prompt from the store.
   let last: InsightsCache["last"] = null;
@@ -175,6 +253,37 @@ function ago(tsIso: string, nowMs: number): string {
   if (mins < 60) return `${mins}m ago`;
   if (mins < 24 * 60) return `${Math.round(mins / 60)}h ago`;
   return `${Math.round(mins / (24 * 60))}d ago`;
+}
+
+/** A right-aligned day-by-day table for `oh insights --history`. */
+export function formatDailyHistory(limit?: number): string {
+  const all = readDailyHistory();
+  if (all.length === 0) return "No daily history yet — it builds up as you work.";
+  const days = limit && limit > 0 ? all.slice(-limit) : all;
+  const pad = (s: string, n: number) => s.padEnd(n);
+  const r = (s: string, n: number) => s.padStart(n);
+  const lines = [`${pad("date", 12)} ${r("total", 8)} ${r("you", 7)} ${r("agent", 7)} ${r("sess", 5)} ${r("tok", 7)}`];
+  let pMs = 0;
+  let wMs = 0;
+  let aMs = 0;
+  let sess = 0;
+  let tok = 0;
+  for (const s of days) {
+    const wall = s.promptMs + s.awayMs + s.workMs;
+    const fresh = s.inputTokens + s.outputTokens + s.cacheWriteTokens;
+    pMs += s.promptMs;
+    wMs += s.workMs;
+    aMs += wall;
+    sess += s.sessions;
+    tok += fresh;
+    lines.push(
+      `${pad(s.date, 12)} ${r(fmtDuration(wall), 8)} ${r(fmtDuration(s.promptMs), 7)} ${r(fmtDuration(s.workMs), 7)} ${r(String(s.sessions), 5)} ${r(fmtTokens(fresh), 7)}`,
+    );
+  }
+  lines.push(
+    `${pad("total", 12)} ${r(fmtDuration(aMs), 8)} ${r(fmtDuration(pMs), 7)} ${r(fmtDuration(wMs), 7)} ${r(String(sess), 5)} ${r(fmtTokens(tok), 7)}`,
+  );
+  return lines.join("\n");
 }
 
 /**
