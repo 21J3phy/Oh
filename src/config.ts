@@ -6,6 +6,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import type { Config } from "./types.js";
@@ -20,6 +21,7 @@ export const INSIGHTS_CACHE_PATH = join(OH_DIR, "insights-cache.json");
 export const BRIEF_MARKER_PATH = join(OH_DIR, "brief-last-shown");
 export const BRIEF_TIP_INDEX_PATH = join(OH_DIR, "brief-tip-index");
 export const LAST_SESSION_PATH = join(OH_DIR, "last-session.json");
+export const INCOGNITO_PATH = join(OH_DIR, "incognito");
 
 const DEFAULTS = {
   embeddingModel: "text-embedding-3-small",
@@ -79,6 +81,43 @@ export function readPartialConfig(): Partial<Config> {
   } catch {
     return {};
   }
+}
+
+// --- Incognito (ADR 0011) -------------------------------------------------
+// Developer control of the shared record: while incognito, capture advances its
+// byte offset and stores NOTHING, leaving a permanent hole that `oh backfill`
+// can never recover. Two switches, OR'd together:
+//   - the marker file ~/.oh/incognito  (toggled by `oh pause` / `oh resume`)
+//   - the env var OH_INCOGNITO=1        (per-session — set it before launching
+//     your agent; the capture child inherits it through the hook)
+
+/** True if capture should record nothing right now. */
+export function isIncognito(): boolean {
+  const env = process.env.OH_INCOGNITO;
+  if (env && env !== "0" && env.toLowerCase() !== "false") return true;
+  return existsSync(INCOGNITO_PATH);
+}
+
+/** Read when global incognito was switched on (null if off / unknown). */
+export function incognitoSince(): string | null {
+  if (!existsSync(INCOGNITO_PATH)) return null;
+  try {
+    const { since } = JSON.parse(readFileSync(INCOGNITO_PATH, "utf8")) as { since?: string };
+    return typeof since === "string" ? since : null;
+  } catch {
+    return "";
+  }
+}
+
+/** Switch global incognito on/off. Returns the new state. */
+export function setIncognito(on: boolean): boolean {
+  ensureDirs();
+  if (on) {
+    writeFileSync(INCOGNITO_PATH, JSON.stringify({ since: new Date().toISOString() }), { mode: 0o600 });
+  } else if (existsSync(INCOGNITO_PATH)) {
+    rmSync(INCOGNITO_PATH);
+  }
+  return on;
 }
 
 /** Merge `partial` into the existing config and write it back (pretty-printed). */

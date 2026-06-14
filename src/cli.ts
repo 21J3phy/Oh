@@ -13,9 +13,12 @@ import {
   OFFSETS_DIR,
   SCHEMA_OUT_PATH,
   ensureDirs,
+  incognitoSince,
+  isIncognito,
   loadConfig,
   readPartialConfig,
   saveConfig,
+  setIncognito,
 } from "./config.js";
 import { SCHEMA_SQL } from "./schema.js";
 import { createDb } from "./db.js";
@@ -56,11 +59,13 @@ function wire(apply: boolean) {
 }
 
 function asTool(v: string | undefined): Tool | undefined {
-  return v === "claude" || v === "codex" ? v : undefined;
+  return v === "claude" || v === "codex" || v === "copilot" ? v : undefined;
 }
 
 function inferTool(file: string): Tool {
-  return /[/\\]\.codex[/\\]/.test(file) ? "codex" : "claude";
+  if (/[/\\]\.codex[/\\]/.test(file)) return "codex";
+  if (/[/\\]\.copilot[/\\]/.test(file)) return "copilot";
+  return "claude";
 }
 
 function sinceMsFrom(s: string | undefined): number | null {
@@ -93,7 +98,11 @@ Self-host (your own Supabase + OpenAI keys):
   oh insights             Your last 7 days of vibecoding: time anatomy, tokens,
                           friction, fun stats (--since W, --repo R). Always
                           your own sessions — Insights are individual-only.
+  oh pause                Incognito: stop recording sessions into the Team Brain.
+  oh resume               Resume recording (the paused stretch stays a hole).
   oh status               Show config + how much is in the Team Brain.
+
+Capture spans Claude Code, Codex, and GitHub Copilot CLI (~/.copilot).
 
 Internal (wired by 'oh init'):
   oh capture --file F --tool T | oh capture --all [--tool T] [--since W]
@@ -487,6 +496,19 @@ function cmdStatusline(): void {
   if (parts.length > 0) console.log(`Oh · ${parts.join(" · ")}`);
 }
 
+/** `oh pause` / `oh resume` — global incognito (ADR 0011). */
+function cmdIncognito(on: boolean): void {
+  setIncognito(on);
+  if (on) {
+    console.log("🔒 incognito ON — new sessions won't be recorded into the Team Brain.");
+    console.log("   Nothing is stored or embedded until you run `oh resume`; the gap");
+    console.log("   can't be backfilled later. (Per-session alt: OH_INCOGNITO=1.)");
+  } else {
+    console.log("● recording resumed — new sessions flow into the Team Brain again.");
+    console.log("   What happened while paused stays a permanent hole, by design.");
+  }
+}
+
 async function cmdStatus(): Promise<void> {
   const cfg = loadConfig();
   let host = cfg.supabaseUrl ?? "";
@@ -514,6 +536,13 @@ async function cmdStatus(): Promise<void> {
     ? readdirSync(OFFSETS_DIR).filter((f) => f.endsWith(".json")).length
     : 0;
   console.log(`captured:  ${tracked} sessions tracked locally`);
+  if (isIncognito()) {
+    const since = incognitoSince();
+    const env = process.env.OH_INCOGNITO && process.env.OH_INCOGNITO !== "0" ? " (OH_INCOGNITO env)" : "";
+    console.log(`recording: 🔒 INCOGNITO — not recording${since ? ` since ${since}` : ""}${env} (\`oh resume\` to re-enable)`);
+  } else {
+    console.log(`recording: ● on (\`oh pause\` for incognito)`);
+  }
   try {
     const { db } = makeClients(cfg);
     console.log(`team brain: ${await db.chunkCount()} chunks`);
@@ -555,7 +584,7 @@ async function main(): Promise<void> {
 
   const cmd = positionals[0] ?? (values.help ? "help" : "");
   const tool = asTool(values.tool);
-  if (values.tool && !tool) throw new Error(`--tool must be "claude" or "codex"`);
+  if (values.tool && !tool) throw new Error(`--tool must be "claude", "codex", or "copilot"`);
 
   switch (cmd) {
     case "signup":
@@ -607,6 +636,12 @@ async function main(): Promise<void> {
       break;
     case "hook":
       await runHook(tool ?? "claude", CLI_PATH);
+      break;
+    case "pause":
+      cmdIncognito(true);
+      break;
+    case "resume":
+      cmdIncognito(false);
       break;
     case "status":
       await cmdStatus();
