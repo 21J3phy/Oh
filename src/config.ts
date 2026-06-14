@@ -18,6 +18,9 @@ export const LOGS_DIR = join(OH_DIR, "logs");
 export const NUDGES_DIR = join(OH_DIR, "nudges");
 export const SCHEMA_OUT_PATH = join(OH_DIR, "schema.sql");
 export const INSIGHTS_CACHE_PATH = join(OH_DIR, "insights-cache.json");
+/** Per-day totals, keyed by local YYYY-MM-DD — survives the day rolling over so
+ *  people can look back at past days (the cache only holds today + this week). */
+export const DAILY_HISTORY_PATH = join(OH_DIR, "insights-daily.json");
 export const BRIEF_MARKER_PATH = join(OH_DIR, "brief-last-shown");
 export const BRIEF_TIP_INDEX_PATH = join(OH_DIR, "brief-tip-index");
 export const LAST_SESSION_PATH = join(OH_DIR, "last-session.json");
