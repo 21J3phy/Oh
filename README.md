@@ -79,6 +79,11 @@ Claude/Codex session files  ──(Stop/SessionEnd hook)──▶  oh capture
 - **Capture** is hook-driven, not a daemon. On every `Stop`/`SessionEnd` it
   spawns a detached `oh capture` that reads only what's new (byte/size offset),
   so it never blocks your turn.
+- **Cross-tool:** Claude Code and Codex are captured live via hooks. **GitHub
+  Copilot CLI** (`~/.copilot/session-state/`) is also captured — it's swept by
+  `oh backfill` and `oh capture --all` (the parser is shape-tolerant and being
+  verified against real files; near-live Copilot capture is the next step —
+  [ADR 0011](./docs/adr/0011-privacy-incognito-copilot-yc.md)).
 - **Only reasoning is embedded** — your prompts, the assistant's explanation and
   reasoning, and one-line summaries of tool actions. Raw file dumps, diffs, and
   tool output are dropped. Secrets are masked with `«secret»` before anything
@@ -188,6 +193,24 @@ Insights are **individual-only**: `oh insights` always reports your own
 sessions — there is no teammate, team, or manager view
 (see [ADR 0008](./docs/adr/0008-insights-wallet-opener-individual-only.md)).
 
+## Incognito — dev control of the record
+
+You decide what gets recorded. `oh pause` turns on incognito; until `oh resume`,
+capture **advances its offset and stores nothing** — no chunks, no metrics, no
+brief crumbs. The skipped stretch is a permanent hole: `oh backfill` can never
+recover it. `oh status` shows whether recording is paused, so you can verify.
+
+- **Whole stretch:** `oh pause` … `oh resume`.
+- **One session:** launch your agent with `OH_INCOGNITO=1` set — the capture
+  child inherits it through the hook.
+- **By project:** the `repos` allowlist already captures only the projects you
+  opt in (everything else is incognito by default).
+
+The tradeoff is the point: an incognito exchange can't be `ask`'d later. Dev
+control — not anonymization — is Oh's answer to the chilling effect
+(see [ADR 0011](./docs/adr/0011-privacy-incognito-copilot-yc.md), and
+[ADR 0003](./docs/adr/0003-attribution-over-anonymity.md) for why not anonymity).
+
 ## Commands
 
 | Command | What it does |
@@ -196,8 +219,9 @@ sessions — there is no teammate, team, or manager view
 | `oh migrate` | (Re)write `~/.oh/schema.sql` to paste into Supabase. |
 | `oh backfill [--since W]` | Seed the store from existing sessions. |
 | `oh insights [--since W] [--repo R]` | Time/token/friction report — your own sessions only. |
-| `oh status` | Show config + chunk count in the Team Brain. |
-| `oh capture --file F --tool T` · `oh capture --all` | Internal (wired by hooks). |
+| `oh pause` / `oh resume` | Incognito (ADR 0011): stop / resume recording sessions into the Team Brain. The paused stretch is never stored and can't be backfilled. |
+| `oh status` | Show config + chunk count in the Team Brain (incl. whether recording is paused). |
+| `oh capture --file F --tool T` · `oh capture --all` | Internal (wired by hooks). `--tool` is `claude`, `codex`, or `copilot`. |
 | `oh mcp` | Internal — the stdio MCP server. |
 | `oh hook --tool T` | Internal — hook entrypoint. |
 

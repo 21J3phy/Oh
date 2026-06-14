@@ -13,10 +13,11 @@ import {
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
-import { ensureDirs, LAST_SESSION_PATH, NUDGES_DIR, OFFSETS_DIR } from "./config.js";
+import { ensureDirs, isIncognito, LAST_SESSION_PATH, NUDGES_DIR, OFFSETS_DIR } from "./config.js";
 import type { Config, Exchange, ParseResult, SessionMeta, Tool } from "./types.js";
 import { parseClaude } from "./parse/claude.js";
 import { parseCodex } from "./parse/codex.js";
+import { parseCopilot } from "./parse/copilot.js";
 import { repoFromCwd, toExchanges } from "./normalize.js";
 import { scrubText } from "./scrub.js";
 import { detectRabbitHole, formatNudge } from "./insights.js";
@@ -27,6 +28,15 @@ import { log } from "./log.js";
 
 export const CLAUDE_ROOT = join(homedir(), ".claude", "projects");
 export const CODEX_ROOT = join(homedir(), ".codex", "sessions");
+// Copilot CLI records sessions locally here (ADR 0011). Files may be .json or
+// .jsonl; the parser handles both shapes.
+export const COPILOT_ROOT = join(homedir(), ".copilot", "session-state");
+
+const PARSERS: Record<Tool, (content: string) => ParseResult> = {
+  claude: parseClaude,
+  codex: parseCodex,
+  copilot: parseCopilot,
+};
 
 /** Bump to force a one-time metrics re-sweep of already-captured sessions. */
 const METRICS_V = 1;
@@ -38,6 +48,26 @@ interface OffsetState {
   updatedAt: string;
   /** exchange_metrics schema version this session was last swept with. */
   metricsV?: number;
+  /**
+   * Highest exchange index captured while incognito (ADR 0011). Nothing at or
+   * below it is ever embedded/stored, so a later non-incognito capture can't
+   * recover the hole. -1/absent = no incognito boundary yet.
+   */
+  privateThrough?: number;
+}
+
+/**
+ * The first exchange index a non-incognito capture may embed: the normal
+ * tail-overlap start (`fallbackFrom`), but never reaching back into a private
+ * boundary. Pure for testability.
+ */
+export function effectiveFromIndex(prev: OffsetState | null, fallbackFrom: number): number {
+  const privateFloor = (prev?.privateThrough ?? -1) + 1;
+  return Math.max(fallbackFrom, privateFloor);
+}
+
+function sessionFileExt(path: string): string {
+  return /\.jsonl$/i.test(path) ? ".jsonl" : /\.json$/i.test(path) ? ".json" : "";
 }
 
 function statePath(sessionId: string): string {
@@ -61,7 +91,7 @@ function saveState(sessionId: string, state: OffsetState): void {
 }
 
 function sessionIdFromPath(path: string, parsed: ParseResult): string {
-  return parsed.sessionId ?? basename(path, ".jsonl");
+  return parsed.sessionId ?? basename(path, sessionFileExt(path));
 }
 
 // --- Rabbit-hole Nudge (ADR 0007) -----------------------------------------
@@ -197,7 +227,7 @@ export async function captureFile(
   }
 
   const content = readFileSync(path, "utf8");
-  const parsed = tool === "claude" ? parseClaude(content) : parseCodex(content);
+  const parsed = (PARSERS[tool] ?? parseClaude)(content);
   const sessionId = sessionIdFromPath(path, parsed);
 
   // Respect the git-project allowlist — skip sessions from other projects.
@@ -222,6 +252,24 @@ export async function captureFile(
     includeThinking: cfg.includeThinking,
     sessionId,
   });
+
+  // Incognito (ADR 0011): advance the offset over everything seen so far and
+  // store NOTHING — no chunks, no metrics, no nudge, no last-session crumb. We
+  // record a private boundary so a later (non-incognito) capture can never reach
+  // back and embed what happened during the hole.
+  if (isIncognito()) {
+    saveState(sessionId, {
+      bytes: size,
+      mtimeMs,
+      processed: exchanges.length,
+      privateThrough: Math.max(prev?.privateThrough ?? -1, exchanges.length - 1),
+      updatedAt: new Date().toISOString(),
+      metricsV: METRICS_V,
+    });
+    log("capture", `${sessionId}: incognito — ${exchanges.length} exchanges skipped, nothing stored`);
+    return { sessionId, tool, exchanges: exchanges.length, embedded: 0, skipped: true };
+  }
+
   if (exchanges.length === 0) {
     saveState(sessionId, {
       bytes: size,
@@ -229,13 +277,15 @@ export async function captureFile(
       processed: 0,
       updatedAt: new Date().toISOString(),
       metricsV: METRICS_V,
+      ...(prev?.privateThrough != null ? { privateThrough: prev.privateThrough } : {}),
     });
     return { sessionId, tool, exchanges: 0, embedded: 0, skipped: false };
   }
 
   // Re-embed only the tail: any new exchange plus the previously-last one (it
-  // may have grown). Deterministic ids mean the upsert overwrites cleanly.
-  const fromIndex = Math.max(0, (prev?.processed ?? 0) - 1);
+  // may have grown). Deterministic ids mean the upsert overwrites cleanly —
+  // but never reach back across an incognito boundary (ADR 0011).
+  const fromIndex = effectiveFromIndex(prev, Math.max(0, (prev?.processed ?? 0) - 1));
   const fresh = exchanges
     .filter((ex) => ex.index >= fromIndex)
     .map((ex) => ({ ...ex, reasoningText: scrubText(ex.reasoningText) }));
@@ -288,6 +338,7 @@ export async function captureFile(
     processed: exchanges.length,
     updatedAt: new Date().toISOString(),
     ...(metricsOk ? { metricsV: METRICS_V } : {}),
+    ...(prev?.privateThrough != null ? { privateThrough: prev.privateThrough } : {}),
   });
 
   return {
@@ -299,7 +350,7 @@ export async function captureFile(
   };
 }
 
-function listJsonl(root: string, sinceMs: number | null): string[] {
+function listJsonl(root: string, sinceMs: number | null, exts: string[] = [".jsonl"]): string[] {
   if (!existsSync(root)) return [];
   let entries: string[];
   try {
@@ -309,7 +360,7 @@ function listJsonl(root: string, sinceMs: number | null): string[] {
   }
   const out: string[] = [];
   for (const rel of entries) {
-    if (!rel.endsWith(".jsonl")) continue;
+    if (!exts.some((e) => rel.toLowerCase().endsWith(e))) continue;
     const path = join(root, rel);
     if (sinceMs != null) {
       try {
@@ -345,6 +396,11 @@ export async function captureAll(
   }
   if (!opts.tool || opts.tool === "codex") {
     for (const p of listJsonl(CODEX_ROOT, sinceMs)) targets.push({ tool: "codex", path: p });
+  }
+  if (!opts.tool || opts.tool === "copilot") {
+    // Copilot session-state files may be .json or .jsonl (ADR 0011).
+    for (const p of listJsonl(COPILOT_ROOT, sinceMs, [".jsonl", ".json"]))
+      targets.push({ tool: "copilot", path: p });
   }
 
   const result: SweepResult = { files: targets.length, sessions: 0, embedded: 0, skipped: 0, errors: 0 };

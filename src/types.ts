@@ -1,6 +1,6 @@
 // Shared types for Oh — the v0 "ask" engine.
 
-export type Tool = "claude" | "codex";
+export type Tool = "claude" | "codex" | "copilot";
 
 /** Hosted-mode credentials and tenancy, stored in ~/.oh/config.json. */
 export interface HostedConfig {
