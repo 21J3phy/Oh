@@ -83,11 +83,12 @@ Hosted (no keys — ADR 0010):
   oh team create "<name>" Create a team; prints the invite code for teammates.
   oh team join <code>     Join a team by invite code.
   oh team                 Show your team + invite code.
-  (then) oh init --yes    Wire Claude+Codex hooks/MCP/skill, and oh backfill.
+  (then) oh init --yes    Wire Claude/Codex/Copilot MCP+hooks+skill, and backfill.
 
 Self-host (your own Supabase + OpenAI keys):
-  oh init [flags]         Configure ~/.oh, write the schema, wire Claude+Codex
-                          (hooks + ask MCP server + ask-why skill). Run with no
+  oh init [flags]         Configure ~/.oh, write the schema, wire Claude/Codex
+                          (hooks + ask MCP + ask-why skill) and Copilot (ask MCP).
+                          Run with no
                           flags to be prompted, or non-interactively with:
                           --author --supabase-url --supabase-key --openai-key --yes
                           (--no-wire skips editing tool configs; --repos "name"
@@ -102,7 +103,7 @@ Self-host (your own Supabase + OpenAI keys):
   oh resume               Resume recording (the paused stretch stays a hole).
   oh status               Show config + how much is in the Team Brain.
 
-Capture spans Claude Code, Codex, and GitHub Copilot CLI (~/.copilot).
+Capture spans Claude Code, Codex, and GitHub Copilot (CLI ~/.copilot + VS Code).
 
 Internal (wired by 'oh init'):
   oh capture --file F --tool T | oh capture --all [--tool T] [--since W]
@@ -125,7 +126,7 @@ function printInitNextSteps(): void {
   console.log("\nNext:");
   console.log("  1. Ensure the schema is applied once in Supabase (SQL editor → paste ~/.oh/schema.sql → Run).");
   console.log("  2. `oh backfill` to seed the store from your existing sessions.");
-  console.log("  3. Restart Claude/Codex to load the MCP server + hooks + skill.");
+  console.log("  3. Restart Claude/Codex/Copilot to load the MCP server + hooks + skill.");
   console.log('  4. Use the `ask` tool from either: "why did we …?"');
 }
 
@@ -211,7 +212,7 @@ async function cmdInit(opts: InitOpts): Promise<void> {
 
   const plan = wire(false);
   if (plan.changed.length > 0) {
-    console.log("\nPlanned wiring (capture hooks + `ask` MCP server + ask-why skill, Claude & Codex):");
+    console.log("\nPlanned wiring (Claude & Codex: hooks + `ask` MCP + ask-why skill; Copilot: `ask` MCP):");
     for (const c of plan.changed) console.log(`  + ${c}`);
   }
   for (const s of plan.skipped) console.log(`  · ${s}`);
@@ -640,7 +641,7 @@ async function main(): Promise<void> {
       await cmdCapture({ file: values.file, all: values.all, tool, since: values.since });
       break;
     case "mcp":
-      await runMcpServer();
+      await runMcpServer(CLI_PATH);
       break;
     case "hook":
       await runHook(tool ?? "claude", CLI_PATH);
