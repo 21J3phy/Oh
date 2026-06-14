@@ -1,4 +1,6 @@
-// Register Oh's capture hooks + the `ask` MCP server in Claude and Codex.
+// Register Oh's capture hooks + the `ask` MCP server in Claude and Codex, and
+// the `ask` MCP server in Copilot CLI (which has no hook system — see
+// registerCopilot / mcp.ts for how Copilot capture is triggered instead).
 //
 // Both tools share the same hook-config schema (hooks.<Event> = [{ hooks:
 // [{ type:"command", command }] }]), so one code path merges into both. We
@@ -24,6 +26,7 @@ export interface RegisterPaths {
   claudeJson: string;
   codexHooks: string;
   codexConfig: string;
+  copilotMcp: string;
 }
 
 export function defaultPaths(): RegisterPaths {
@@ -33,6 +36,7 @@ export function defaultPaths(): RegisterPaths {
     claudeJson: join(h, ".claude.json"),
     codexHooks: join(h, ".codex", "hooks.json"),
     codexConfig: join(h, ".codex", "config.toml"),
+    copilotMcp: join(h, ".copilot", "mcp-config.json"),
   };
 }
 
@@ -280,6 +284,39 @@ export function registerCodex(
 }
 
 /**
+ * Register Copilot: the `ask` MCP server in ~/.copilot/mcp-config.json.
+ *
+ * Copilot CLI is a first-class CONSUMER through MCP (it has no Claude/Codex-style
+ * Stop/SessionStart hook system, and no skills dir — so there's no hook or skill
+ * to install here). Capture for Copilot-only devs is instead kicked from the MCP
+ * server's own startup (see mcp.ts), the one Copilot-launched process we own.
+ * Config shape matches `copilot mcp add` (stdio/local server). Merge-preserving.
+ */
+export function registerCopilot(
+  node: string,
+  cli: string,
+  apply: boolean,
+  paths: RegisterPaths = defaultPaths(),
+): RegisterResult {
+  const result = emptyResult();
+  const conf = readJson(paths.copilotMcp);
+  conf.mcpServers ??= {};
+  const desired = { type: "local", command: node, args: [cli, "mcp"], tools: ["*"] };
+  const current = conf.mcpServers.oh;
+  if (JSON.stringify(current) !== JSON.stringify(desired)) {
+    conf.mcpServers.oh = desired;
+    if (apply) {
+      backup(paths.copilotMcp, result);
+      writeJson(paths.copilotMcp, conf);
+    }
+    result.changed.push(`${paths.copilotMcp} (mcpServers.oh)`);
+  } else {
+    result.skipped.push(`${paths.copilotMcp} (mcpServers.oh already set)`);
+  }
+  return result;
+}
+
+/**
  * Install the `ask-why` Claude skill (the proactive front-door) into the user's
  * skills dir. Idempotent: rewrites only when the content differs, backing up any
  * existing file first.
@@ -318,10 +355,11 @@ export function registerAll(
 ): RegisterResult {
   const a = registerClaude(node, cli, apply, paths);
   const b = registerCodex(node, cli, apply, paths);
+  const c = registerCopilot(node, cli, apply, paths);
   return {
-    changed: [...a.changed, ...b.changed],
-    skipped: [...a.skipped, ...b.skipped],
-    backups: [...a.backups, ...b.backups],
-    notes: [...a.notes, ...b.notes],
+    changed: [...a.changed, ...b.changed, ...c.changed],
+    skipped: [...a.skipped, ...b.skipped, ...c.skipped],
+    backups: [...a.backups, ...b.backups, ...c.backups],
+    notes: [...a.notes, ...b.notes, ...c.notes],
   };
 }

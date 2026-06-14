@@ -3,6 +3,7 @@
 // key lives here). The tool description is load-bearing — it tells the agent
 // how to use the excerpts (cite, prefer recent, admit when empty).
 
+import { spawn } from "node:child_process";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -22,10 +23,33 @@ How to use the results:
 
 Use this instead of re-deriving context or asking a teammate to re-explain. Optional filters narrow the search: who (a person's name — including the user's own, for self-recall), repo (working-dir basename), since (ISO date or a window like "7d"/"30d").`;
 
-export async function runMcpServer(): Promise<void> {
+/**
+ * Copilot CLI has no Stop/SessionStart hook (unlike Claude/Codex), so a
+ * Copilot-only dev would never auto-capture. The MCP server is the one process
+ * Copilot launches that we control, so on startup we kick a DETACHED Copilot
+ * sweep: it captures the previous Copilot session(s) and any prior unswept ones.
+ * Cheap — capture short-circuits unchanged files via offsets and respects
+ * incognito. Never blocks or breaks the server. Harmless when launched by
+ * Claude/Codex too (they also sweep Copilot via their own hooks).
+ */
+function kickCopilotCapture(cliPath: string): void {
+  try {
+    const child = spawn(process.execPath, [cliPath, "capture", "--all", "--tool", "copilot", "--since", "2d"], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+    log("mcp", "kicked detached copilot capture sweep on startup");
+  } catch (err) {
+    log("mcp", `copilot capture kick failed — ${(err as Error).message}`);
+  }
+}
+
+export async function runMcpServer(cliPath?: string): Promise<void> {
   const cfg = loadConfig();
   const db = createDb(cfg);
   const embedder = createEmbedder(cfg);
+  if (cliPath) kickCopilotCapture(cliPath);
 
   const server = new McpServer({ name: "oh", version: "0.0.1" });
 

@@ -1,30 +1,40 @@
-// Parse a GitHub Copilot CLI session into common ParsedEvents.
+// Parse a GitHub Copilot session into common ParsedEvents.
 //
-// Copilot CLI records session data locally under ~/.copilot/session-state/
-// (prompts, the model's responses, the tools used, and files modified) — the
-// same shape Oh already tails for Claude and Codex, so capture needs only this
-// parser, no new infrastructure (ADR 0011).
+// Copilot CLI records each session under ~/.copilot/session-state/<uuid>/ as an
+// `events.jsonl` (one event per line) plus a `workspace.yaml`. Oh tails the same
+// way it does Claude/Codex, so capture needs only this parser, no new infra
+// (ADR 0011).
 //
-// IMPORTANT: unlike claude.ts / codex.ts, this parser is written against the
-// *documented* behaviour of Copilot CLI, not yet verified line-by-line against
-// real files (Copilot's on-disk schema is not publicly specced and has shifted
-// between releases). It is therefore deliberately *shape-tolerant*: it accepts
-// either a single JSON object with a messages/turns/events array, or JSONL with
-// one event per line, and probes a few common field names for each. When the
-// real format is confirmed, tighten this the way the other parsers are.
-// Degrade-to-nothing is the rule — an unrecognised file yields zero events, it
-// never throws.
+// VERIFIED CLI shape (copilot-agent 0.0.400): every line is an envelope
+//   { type, data, id, timestamp, parentId }
+// where `type` is dotted/namespaced ("session.start", "user.message",
+// "session.model_change", "assistant.turn_start", …) and the real content hangs
+// off `data`. Session id and cwd ride on the `session.start` event
+// (`data.sessionId`, `data.context.cwd`) — the filename ("events") is useless as
+// an id. The user's clean prompt is `data.content` (a sibling `transformedContent`
+// carries Copilot's context-wrapped version, which we drop).
+//
+// PARTIALLY INFERRED: the assistant-message and tool-call/result event shapes
+// aren't yet observed on disk (the only local session errored before the model
+// replied). They're handled shape-tolerantly off the same `<ns>.<sub>` dotted
+// convention; tighten when a real assistant/tool event is confirmed.
+//
+// We ALSO keep the older shape-tolerant paths (flat role/kind chat JSONL, and a
+// single session object with a messages array) — they cover VS Code Copilot
+// chatSessions and any future format drift. Degrade-to-nothing is the rule: an
+// unrecognised file yields zero events, it never throws.
 
 import type { ParsedEvent, ParseResult } from "../types.js";
 import { firstLine, stripWrapperBlocks } from "./util.js";
 
-// Copilot CLI injects its own preamble/context the way the other tools do; strip
+// Copilot injects its own preamble/context the way the other tools do; strip
 // the obvious wrappers so we keep the person's actual words.
 const USER_WRAPPER_TAGS = [
   "system-reminder",
   "environment_context",
   "user_instructions",
   "context",
+  "current_datetime",
 ];
 
 function cleanUserText(s: string): string {
@@ -109,32 +119,119 @@ function tsOf(o: any): string {
 }
 
 function modelOf(o: any): string | undefined {
-  const m = o?.model ?? o?.modelId ?? o?.model_id;
+  const m = o?.model ?? o?.modelId ?? o?.model_id ?? o?.newModel;
   return typeof m === "string" ? m : undefined;
 }
 
-/** Pull one logical event out of a record, appending to `events`. */
+/** Session-level ids accumulated as we scan (first non-empty wins). */
+interface Ids {
+  sessionId: string | null;
+  cwd: string | null;
+  summary: string | null;
+}
+
+/** Push a usage/meta event if `src` carries token counts in any known shape. */
+function pushUsage(src: any, ts: string, events: ParsedEvent[], ctx: { model?: string }): void {
+  const usage = src?.usage ?? src?.tokenUsage ?? src?.token_usage;
+  if (!usage || typeof usage !== "object") return;
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const input = n(usage.input_tokens ?? usage.inputTokens ?? usage.prompt_tokens ?? usage.promptTokens);
+  const output = n(usage.output_tokens ?? usage.outputTokens ?? usage.completion_tokens ?? usage.completionTokens);
+  const cacheRead = n(usage.cache_read_input_tokens ?? usage.cacheReadTokens ?? usage.cached_tokens);
+  if (input + output + cacheRead > 0) {
+    events.push({ kind: "meta", ts, model: ctx.model, usage: { input, output, cacheRead, cacheWrite: 0 } });
+  }
+}
+
+/** True for a Copilot CLI envelope: dotted `type` plus a `data` object. */
+function isCliEnvelope(o: any): boolean {
+  return !!o && typeof o.type === "string" && o.type.includes(".") && o.data != null && typeof o.data === "object";
+}
+
+/**
+ * Handle one Copilot CLI envelope event ({type:"<ns>.<sub>", data}). Verified
+ * for session/user events; tolerant for the not-yet-observed assistant/tool
+ * shapes, dispatched off the dotted namespace.
+ */
+function handleCliEvent(type: string, data: any, ts: string, events: ParsedEvent[], ctx: { model?: string }): void {
+  const dot = type.indexOf(".");
+  const ns = dot === -1 ? type : type.slice(0, dot);
+  const sub = dot === -1 ? "" : type.slice(dot + 1);
+
+  // Model + token usage can ride on any event's data.
+  const m = modelOf(data);
+  if (m) ctx.model = m;
+  pushUsage(data, ts, events, ctx);
+
+  if (ns === "session") return; // start/info/model_change/error carry no reasoning text
+
+  if (ns === "user") {
+    const text = cleanUserText(contentText(data.content ?? data.text ?? data.message ?? data.prompt));
+    if (text) events.push({ kind: "user", ts, text, ...(INTERRUPT_RE.test(text) ? { interrupted: true } : {}) });
+    return;
+  }
+
+  if (ns === "tool") {
+    if (sub.includes("result") || sub.includes("output") || sub.includes("return")) {
+      events.push({ kind: "tool_result", ts, isError: outputIsError(data) });
+      return;
+    }
+    const name = data.name ?? data.tool ?? data.tool_name ?? data.function?.name;
+    events.push({
+      kind: "tool_call",
+      ts,
+      toolName: typeof name === "string" ? name : undefined,
+      toolSummary: summarizeTool(name, data.arguments ?? data.args ?? data.input ?? data.parameters ?? data.function?.arguments),
+    });
+    return;
+  }
+
+  if (ns === "assistant") {
+    if (sub.includes("tool") || sub.includes("call")) {
+      const name = data.name ?? data.tool ?? data.tool_name ?? data.function?.name;
+      events.push({
+        kind: "tool_call",
+        ts,
+        toolName: typeof name === "string" ? name : undefined,
+        toolSummary: summarizeTool(name, data.arguments ?? data.args ?? data.input ?? data.parameters ?? data.function?.arguments),
+      });
+      return;
+    }
+    if (sub.includes("reason") || sub.includes("think")) {
+      const text = contentText(data.content ?? data.text ?? data.summary ?? data.thinking).trim();
+      if (text) events.push({ kind: "reasoning", ts, text });
+      return;
+    }
+    // message / text / content / turn_* — emit only when there's real text.
+    const text = contentText(data.content ?? data.text ?? data.message ?? data.response).trim();
+    if (text) events.push({ kind: "assistant", ts, text, model: ctx.model });
+    const calls = data.tool_calls ?? data.toolCalls;
+    if (Array.isArray(calls)) {
+      for (const c of calls) {
+        const fn = c?.function ?? c;
+        events.push({
+          kind: "tool_call",
+          ts,
+          toolName: typeof fn?.name === "string" ? fn.name : undefined,
+          toolSummary: summarizeTool(fn?.name, fn?.arguments ?? fn?.args ?? fn?.input ?? c?.input),
+        });
+      }
+    }
+    return;
+  }
+}
+
+/** Pull one logical event out of a flat (non-enveloped) record. */
 function handleRecord(o: any, events: ParsedEvent[], ctx: { model?: string }): void {
   if (!o || typeof o !== "object") return;
   const ts = tsOf(o);
   const m = modelOf(o);
   if (m) ctx.model = m;
 
-  // Role-tagged messages (chat shape).
   const role = typeof o.role === "string" ? o.role.toLowerCase() : null;
   const kind = typeof o.type === "string" ? o.type.toLowerCase() : typeof o.kind === "string" ? o.kind.toLowerCase() : null;
 
-  // Token usage, wherever it hangs.
-  const usage = o.usage ?? o.tokenUsage ?? o.token_usage;
-  if (usage && typeof usage === "object") {
-    const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
-    const input = n(usage.input_tokens ?? usage.inputTokens ?? usage.prompt_tokens ?? usage.promptTokens);
-    const output = n(usage.output_tokens ?? usage.outputTokens ?? usage.completion_tokens ?? usage.completionTokens);
-    const cacheRead = n(usage.cache_read_input_tokens ?? usage.cacheReadTokens ?? usage.cached_tokens);
-    if (input + output + cacheRead > 0) {
-      events.push({ kind: "meta", ts, model: ctx.model, usage: { input, output, cacheRead, cacheWrite: 0 } });
-    }
-  }
+  pushUsage(o, ts, events, ctx);
 
   const isUser = (role && ROLE_USER.has(role)) || (kind && KIND_USER.has(kind));
   const isAssistant = (role && ROLE_ASSISTANT.has(role)) || (kind && KIND_ASSISTANT.has(kind));
@@ -147,7 +244,6 @@ function handleRecord(o: any, events: ParsedEvent[], ctx: { model?: string }): v
   if (isAssistant) {
     const text = contentText(o.content ?? o.text ?? o.message ?? o.response).trim();
     if (text) events.push({ kind: "assistant", ts, text, model: ctx.model });
-    // Some shapes nest tool calls inside the assistant message.
     const calls = o.tool_calls ?? o.toolCalls;
     if (Array.isArray(calls)) {
       for (const c of calls) {
@@ -183,6 +279,44 @@ function handleRecord(o: any, events: ParsedEvent[], ctx: { model?: string }): v
   }
 }
 
+/** Route a record to the CLI-envelope handler or the flat handler. */
+function dispatch(o: any, events: ParsedEvent[], ctx: { model?: string }): void {
+  if (isCliEnvelope(o)) handleCliEvent(o.type.toLowerCase(), o.data, tsOf(o), events, ctx);
+  else handleRecord(o.payload ?? o, events, ctx);
+}
+
+/** Probe a single object for session id / cwd / summary, first non-empty wins. */
+function probeIds(s: any, ids: Ids, allowBareId: boolean): void {
+  if (!s || typeof s !== "object") return;
+  if (!ids.sessionId) {
+    const v = s.sessionId ?? s.session_id ?? (allowBareId ? s.id : undefined);
+    if (typeof v === "string") ids.sessionId = v;
+  }
+  if (!ids.cwd) {
+    const v = s.cwd ?? s.workdir ?? s.workingDirectory ?? s.working_directory ?? s.repoPath ?? s.directory;
+    if (typeof v === "string") ids.cwd = v;
+  }
+  if (!ids.summary) {
+    const v = s.title ?? s.summary ?? s.name;
+    if (typeof v === "string" && v.trim()) ids.summary = v.trim();
+  }
+}
+
+/**
+ * Capture ids from a record. For CLI envelopes the id/cwd live on
+ * `data` / `data.context` and the envelope's own `id` is an EVENT id (never the
+ * session id), so bare `id` is only trusted for flat records.
+ */
+function captureIds(o: any, ids: Ids): void {
+  if (isCliEnvelope(o)) {
+    probeIds(o.data, ids, false);
+    probeIds(o.data.context, ids, false);
+  } else {
+    probeIds(o, ids, true);
+    probeIds(o.meta ?? o.session ?? o.metadata, ids, true);
+  }
+}
+
 /** Find the conversation array inside a top-level session object. */
 function messagesFrom(root: any): any[] | null {
   for (const k of ["messages", "turns", "events", "history", "items", "entries", "conversation"]) {
@@ -194,48 +328,31 @@ function messagesFrom(root: any): any[] | null {
 export function parseCopilot(content: string): ParseResult {
   const events: ParsedEvent[] = [];
   const ctx: { model?: string } = {};
-  let sessionId: string | null = null;
-  let cwd: string | null = null;
-  let summary: string | null = null;
+  const ids: Ids = { sessionId: null, cwd: null, summary: null };
 
   const trimmed = content.trim();
-  if (!trimmed) return { tool: "copilot", sessionId, cwd, summary, events };
+  if (!trimmed) return { tool: "copilot", ...ids, events };
 
-  const idFrom = (o: any) => {
-    if (!sessionId) {
-      const v = o?.sessionId ?? o?.session_id ?? o?.id;
-      if (typeof v === "string") sessionId = v;
-    }
-    if (!cwd) {
-      const v = o?.cwd ?? o?.workdir ?? o?.workingDirectory ?? o?.working_directory ?? o?.repoPath ?? o?.directory;
-      if (typeof v === "string") cwd = v;
-    }
-    if (!summary) {
-      const v = o?.title ?? o?.summary ?? o?.name;
-      if (typeof v === "string" && v.trim()) summary = v.trim();
-    }
-  };
-
-  // Shape A: a single JSON object (the whole session in one file).
+  // Shape A: a single JSON object (a whole session in one file — VS Code-style).
   if (trimmed.startsWith("{")) {
     try {
       const root = JSON.parse(trimmed);
-      idFrom(root);
-      // Session-level metadata may also live on a nested meta object.
-      idFrom(root.meta ?? root.session ?? root.metadata ?? {});
+      // A single-object session is never a per-line CLI envelope; trust bare id.
+      probeIds(root, ids, true);
+      probeIds(root.meta ?? root.session ?? root.metadata, ids, true);
       const msgs = messagesFrom(root);
       if (msgs) {
-        for (const m of msgs) handleRecord(m, events, ctx);
-        return { tool: "copilot", sessionId, cwd, summary, events };
+        for (const m of msgs) dispatch(m, events, ctx);
+        return { tool: "copilot", ...ids, events };
       }
-      // Object with no recognised array — fall through to per-line scan in case
-      // it's actually JSONL whose first line happens to be an object.
+      // Object with no recognised array — fall through to a per-line scan in
+      // case it's actually JSONL whose first line happens to be an object.
     } catch {
       // not a single JSON object — try JSONL
     }
   }
 
-  // Shape B: JSONL — one event per line.
+  // Shape B: JSONL — one event per line (Copilot CLI events.jsonl).
   for (const line of trimmed.split("\n")) {
     if (!line.trim()) continue;
     let o: any;
@@ -244,10 +361,9 @@ export function parseCopilot(content: string): ParseResult {
     } catch {
       continue;
     }
-    idFrom(o);
-    // A line may itself be a {payload:…} envelope (Codex-style).
-    handleRecord(o.payload ?? o, events, ctx);
+    captureIds(o, ids);
+    dispatch(o, events, ctx);
   }
 
-  return { tool: "copilot", sessionId, cwd, summary, events };
+  return { tool: "copilot", ...ids, events };
 }

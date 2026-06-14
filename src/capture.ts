@@ -28,9 +28,30 @@ import { log } from "./log.js";
 
 export const CLAUDE_ROOT = join(homedir(), ".claude", "projects");
 export const CODEX_ROOT = join(homedir(), ".codex", "sessions");
-// Copilot CLI records sessions locally here (ADR 0011). Files may be .json or
-// .jsonl; the parser handles both shapes.
+// Copilot CLI records sessions locally here (ADR 0011), one events.jsonl per
+// session under session-state/<uuid>/. The parser handles the {type,data}
+// envelope; ids/cwd ride on the session.start event.
 export const COPILOT_ROOT = join(homedir(), ".copilot", "session-state");
+
+/**
+ * VS Code Copilot Chat persists sessions under each workspace's storage in a
+ * `chatSessions/` dir (ADR 0011 Decision 3 — the real org footprint). We sweep
+ * the platform's VS Code (+ Insiders) workspaceStorage roots and keep only files
+ * on a `chatSessions/` path. NOTE: the VS Code chat file schema is request/
+ * response-shaped and not yet verified against a real file on this machine — the
+ * parser is shape-tolerant and degrades to nothing until one is confirmed.
+ */
+export function copilotVscodeRoots(): string[] {
+  const h = homedir();
+  const variants = ["Code", "Code - Insiders", "VSCodium"];
+  const bases =
+    process.platform === "darwin"
+      ? [join(h, "Library", "Application Support")]
+      : process.platform === "win32"
+        ? [process.env.APPDATA ?? join(h, "AppData", "Roaming")]
+        : [process.env.XDG_CONFIG_HOME ?? join(h, ".config")];
+  return bases.flatMap((b) => variants.map((v) => join(b, v, "User", "workspaceStorage")));
+}
 
 const PARSERS: Record<Tool, (content: string) => ParseResult> = {
   claude: parseClaude,
@@ -350,7 +371,12 @@ export async function captureFile(
   };
 }
 
-function listJsonl(root: string, sinceMs: number | null, exts: string[] = [".jsonl"]): string[] {
+function listJsonl(
+  root: string,
+  sinceMs: number | null,
+  exts: string[] = [".jsonl"],
+  mustContain?: string,
+): string[] {
   if (!existsSync(root)) return [];
   let entries: string[];
   try {
@@ -361,6 +387,8 @@ function listJsonl(root: string, sinceMs: number | null, exts: string[] = [".jso
   const out: string[] = [];
   for (const rel of entries) {
     if (!exts.some((e) => rel.toLowerCase().endsWith(e))) continue;
+    // Narrow a broad root (e.g. VS Code workspaceStorage) to the dir we want.
+    if (mustContain && !rel.replace(/\\/g, "/").includes(mustContain)) continue;
     const path = join(root, rel);
     if (sinceMs != null) {
       try {
@@ -398,9 +426,14 @@ export async function captureAll(
     for (const p of listJsonl(CODEX_ROOT, sinceMs)) targets.push({ tool: "codex", path: p });
   }
   if (!opts.tool || opts.tool === "copilot") {
-    // Copilot session-state files may be .json or .jsonl (ADR 0011).
+    // Copilot CLI (events.jsonl per session).
     for (const p of listJsonl(COPILOT_ROOT, sinceMs, [".jsonl", ".json"]))
       targets.push({ tool: "copilot", path: p });
+    // Copilot in VS Code (+ Insiders): chatSessions under each workspace store.
+    for (const root of copilotVscodeRoots()) {
+      for (const p of listJsonl(root, sinceMs, [".json", ".jsonl"], "/chatSessions/"))
+        targets.push({ tool: "copilot", path: p });
+    }
   }
 
   const result: SweepResult = { files: targets.length, sessions: 0, embedded: 0, skipped: 0, errors: 0 };

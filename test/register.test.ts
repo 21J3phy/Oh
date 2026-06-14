@@ -15,6 +15,7 @@ function setup(): RegisterPaths {
     claudeJson: join(dir, "claude.json"),
     codexHooks: join(dir, "codex-hooks.json"),
     codexConfig: join(dir, "codex-config.toml"),
+    copilotMcp: join(dir, "copilot-mcp-config.json"),
   };
   // Pre-existing content that must survive the merge.
   writeFileSync(
@@ -29,6 +30,7 @@ function setup(): RegisterPaths {
     JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: "codex-notify.sh" }] }] } }),
   );
   writeFileSync(paths.codexConfig, 'notify = ["x"]\n\n[mcp_servers.other]\ncommand = "y"\n');
+  writeFileSync(paths.copilotMcp, JSON.stringify({ mcpServers: { context7: { command: "npx" } } }));
   return paths;
 }
 
@@ -38,8 +40,8 @@ test("registerAll merges into existing configs without clobbering them", () => {
   const paths = setup();
   const res = registerAll(NODE, CLI, true, paths);
 
-  assert.ok(res.changed.length >= 4, "all four files changed");
-  assert.ok(res.backups.length >= 4, "all four files backed up");
+  assert.ok(res.changed.length >= 5, "all five files changed");
+  assert.ok(res.backups.length >= 5, "all five files backed up");
 
   // Claude hooks: original survives, ours added to Stop + SessionEnd.
   const settings = JSON.parse(readFileSync(paths.claudeSettings, "utf8"));
@@ -65,6 +67,11 @@ test("registerAll merges into existing configs without clobbering them", () => {
   assert.ok(toml.includes("[mcp_servers.other]"), "existing toml block preserved");
   assert.ok(toml.includes("[mcp_servers.oh]"));
   assert.ok(toml.includes(`args = ["${CLI}", "mcp"]`));
+
+  // Copilot MCP: existing server preserved, oh added (stdio/local shape).
+  const cop = JSON.parse(readFileSync(paths.copilotMcp, "utf8"));
+  assert.equal(cop.mcpServers.context7.command, "npx", "existing copilot server preserved");
+  assert.deepEqual(cop.mcpServers.oh, { type: "local", command: NODE, args: [CLI, "mcp"], tools: ["*"] });
 });
 
 test("re-running is idempotent — no duplicates", () => {
