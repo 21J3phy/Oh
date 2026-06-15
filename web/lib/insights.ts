@@ -225,6 +225,15 @@ export function efficiencySignals(r: InsightsReport): EfficiencySignal[] {
 }
 
 // ---- Daily buckets for the trend charts.
+
+// Per-repo slice of a single day — "what you worked on", ranked by fresh spend.
+export interface RepoDay {
+  repo: string; // "unknown" when the session had no repo
+  freshTokens: number;
+  exchanges: number;
+  sessions: number;
+}
+
 export interface DayBucket {
   day: string; // YYYY-MM-DD
   freshTokens: number;
@@ -235,20 +244,29 @@ export interface DayBucket {
   exchanges: number;
   corrections: number;
   errors: number;
+  sessions: number; // distinct sessions touched that day
+  repos: RepoDay[]; // ranked by freshTokens desc — the day's "what"
 }
 
 export function bucketByDay(rows: MetricsRow[]): DayBucket[] {
   const buckets = new Map<string, DayBucket>();
+  // Side accumulators (kept off DayBucket so the public shape stays plain data).
+  const daySessions = new Map<string, Set<string>>();
+  const dayRepos = new Map<string, Map<string, { freshTokens: number; exchanges: number; sessions: Set<string> }>>();
+
   for (const r of rows) {
     const d = new Date(r.ts);
     if (Number.isNaN(d.getTime())) continue;
     const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     let b = buckets.get(day);
     if (!b) {
-      b = { day, freshTokens: 0, cacheReadTokens: 0, workMs: 0, promptMs: 0, awayMs: 0, exchanges: 0, corrections: 0, errors: 0 };
+      b = { day, freshTokens: 0, cacheReadTokens: 0, workMs: 0, promptMs: 0, awayMs: 0, exchanges: 0, corrections: 0, errors: 0, sessions: 0, repos: [] };
       buckets.set(day, b);
+      daySessions.set(day, new Set());
+      dayRepos.set(day, new Map());
     }
-    b.freshTokens += r.input_tokens + r.output_tokens + r.cache_write_tokens;
+    const fresh = r.input_tokens + r.output_tokens + r.cache_write_tokens;
+    b.freshTokens += fresh;
     b.cacheReadTokens += r.cache_read_tokens;
     b.workMs += r.work_ms;
     if (r.think_ms != null) {
@@ -258,7 +276,27 @@ export function bucketByDay(rows: MetricsRow[]): DayBucket[] {
     b.exchanges += 1;
     if (r.is_correction) b.corrections += 1;
     b.errors += r.errors;
+
+    daySessions.get(day)!.add(r.session_id);
+    const repoKey = r.repo ?? "unknown";
+    const repos = dayRepos.get(day)!;
+    let agg = repos.get(repoKey);
+    if (!agg) {
+      agg = { freshTokens: 0, exchanges: 0, sessions: new Set() };
+      repos.set(repoKey, agg);
+    }
+    agg.freshTokens += fresh;
+    agg.exchanges += 1;
+    agg.sessions.add(r.session_id);
   }
+
+  for (const [day, b] of buckets) {
+    b.sessions = daySessions.get(day)!.size;
+    b.repos = [...dayRepos.get(day)!.entries()]
+      .map(([repo, a]) => ({ repo, freshTokens: a.freshTokens, exchanges: a.exchanges, sessions: a.sessions.size }))
+      .sort((x, y) => y.freshTokens - x.freshTokens);
+  }
+
   return [...buckets.values()].sort((a, b) => a.day.localeCompare(b.day));
 }
 
