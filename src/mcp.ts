@@ -11,6 +11,8 @@ import { loadConfig } from "./config.js";
 import { createDb } from "./db.js";
 import { createEmbedder } from "./embed.js";
 import { ask, formatAskResult } from "./ask.js";
+import { gitRepoIdentity } from "./capture.js";
+import { shortRepo } from "./normalize.js";
 import { log } from "./log.js";
 
 const ASK_DESCRIPTION = `Query Oh — the verbatim memory of all past AI-coding Sessions, the user's own AND their teammates', across Claude and Codex. Unlike summarized agent memory, it returns the exact original reasoning: ranked, cited excerpts with quotes and code. Use it (a) to recall the user's own earlier work — "what was my plan for X?", "how did I fix Y last time?" — and (b) to answer "why is this code/plan the way it is?" without interrupting the author.
@@ -51,13 +53,26 @@ export async function runMcpServer(cliPath?: string): Promise<void> {
   const embedder = createEmbedder(cfg);
   if (cliPath) kickCopilotCapture(cliPath);
 
+  // Repo isolation (default on): the server runs with the agent's working dir as
+  // its cwd, so we pin every query to that git repo and an agent can't read
+  // another project's memory. `gitRepoIdentity` is the same value stored on each
+  // chunk (the git remote, or a basename fallback for non-git dirs).
+  const scopedRepo =
+    cfg.repoScopedAsk === false ? null : gitRepoIdentity(process.cwd());
+  if (scopedRepo && scopedRepo !== "unknown") {
+    log("mcp", `ask scoped to repo "${scopedRepo}" (repoScopedAsk)`);
+  }
+
   const server = new McpServer({ name: "oh", version: "0.0.1" });
 
   server.registerTool(
     "ask",
     {
       title: "Ask Oh — verbatim memory of your and your team's sessions",
-      description: ASK_DESCRIPTION,
+      description:
+        scopedRepo && scopedRepo !== "unknown"
+          ? `${ASK_DESCRIPTION}\n\nScope: results are limited to the current repo ("${shortRepo(scopedRepo)}") — the \`repo\` filter is ignored. If nothing is found, say so rather than reaching into other repos.`
+          : ASK_DESCRIPTION,
       inputSchema: {
         question: z
           .string()
@@ -72,7 +87,10 @@ export async function runMcpServer(cliPath?: string): Promise<void> {
     },
     async (args) => {
       try {
-        const result = await ask(cfg, db, embedder, args);
+        // Force the current-repo scope when enabled — the model can't widen it.
+        const params =
+          scopedRepo && scopedRepo !== "unknown" ? { ...args, repo: scopedRepo } : args;
+        const result = await ask(cfg, db, embedder, params);
         log("mcp", `ask ${JSON.stringify(args.question).slice(0, 80)} -> ${result.hits.length} hits`);
         return { content: [{ type: "text" as const, text: formatAskResult(result) }] };
       } catch (err) {

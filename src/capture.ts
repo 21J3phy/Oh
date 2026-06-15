@@ -187,6 +187,17 @@ export function resolveProjectKey(cwd: string | null): string | null {
   return key;
 }
 
+/**
+ * A session's git-repo identity: its normalized origin remote (e.g.
+ * "github.com/21j3phy/aydhi"), or the cwd basename when there's no git remote.
+ * This is what we stamp into `repo` so scoping and per-repo time tracking key on
+ * the actual git project rather than a folder name (two clones of the same repo,
+ * or two repos sharing a folder name, resolve correctly). Cached via cwd.
+ */
+export function gitRepoIdentity(cwd: string | null | undefined): string {
+  return resolveProjectKey(cwd ?? null) ?? repoFromCwd(cwd);
+}
+
 /** True if the cwd's git project is allowed by the (optional) repos allowlist. */
 export function repoAllowed(cwd: string | null, repos: string[] | undefined): boolean {
   if (!repos || repos.length === 0) return true; // no filter = capture everything
@@ -236,7 +247,9 @@ export async function captureFile(
   cfg: Config,
   db: Db,
   embedder: Embedder,
+  opts: { force?: boolean } = {},
 ): Promise<CaptureResult> {
+  const force = opts.force === true;
   let size: number;
   let mtimeMs: number;
   try {
@@ -258,8 +271,10 @@ export async function captureFile(
 
   // Cheap short-circuit: nothing changed since we last processed this file
   // (and its metrics are current — a METRICS_V bump forces one re-sweep).
+  // `force` (e.g. `oh backfill --force`) skips it to re-stamp repo identities.
   const prev = loadState(sessionId);
   if (
+    !force &&
     prev &&
     prev.bytes === size &&
     Math.abs(prev.mtimeMs - mtimeMs) < 1 &&
@@ -273,6 +288,9 @@ export async function captureFile(
     includeThinking: cfg.includeThinking,
     sessionId,
   });
+  // Stamp the git-repo identity (normalize.ts only knows the basename). This is
+  // what scoping and per-repo tracking key on.
+  for (const ex of exchanges) ex.repo = gitRepoIdentity(ex.cwd);
 
   // Incognito (ADR 0011): advance the offset over everything seen so far and
   // store NOTHING — no chunks, no metrics, no nudge, no last-session crumb. We
@@ -305,16 +323,21 @@ export async function captureFile(
 
   // Re-embed only the tail: any new exchange plus the previously-last one (it
   // may have grown). Deterministic ids mean the upsert overwrites cleanly —
-  // but never reach back across an incognito boundary (ADR 0011).
-  const fromIndex = effectiveFromIndex(prev, Math.max(0, (prev?.processed ?? 0) - 1));
+  // but never reach back across an incognito boundary (ADR 0011). `force`
+  // re-embeds from the start (still clamped past any private floor).
+  const fallbackFrom = force ? 0 : Math.max(0, (prev?.processed ?? 0) - 1);
+  const fromIndex = effectiveFromIndex(prev, fallbackFrom);
   const fresh = exchanges
     .filter((ex) => ex.index >= fromIndex)
     .map((ex) => ({ ...ex, reasoningText: scrubText(ex.reasoningText) }));
 
   // Metrics carry no text and no embedding — tail-only normally, the whole
-  // session on the first METRICS_V-aware pass (backfills pre-v0.1 captures).
+  // session on the first METRICS_V-aware pass (backfills pre-v0.1 captures) or
+  // under --force (re-stamp), always respecting the private floor via fromIndex.
   const metricsTargets =
-    prev?.metricsV === METRICS_V ? exchanges.filter((ex) => ex.index >= fromIndex) : exchanges;
+    prev?.metricsV === METRICS_V || force
+      ? exchanges.filter((ex) => ex.index >= fromIndex)
+      : exchanges;
 
   // Metrics must never break capture — e.g. the team store predates migration
   // 0002. On failure, keep capturing chunks and leave metricsV unset so the
@@ -329,7 +352,7 @@ export async function captureFile(
       tool,
       author: cfg.author,
       cwd,
-      repo: repoFromCwd(cwd),
+      repo: gitRepoIdentity(cwd),
       startedAt: firstExchange.ts,
       lastSeenAt: lastExchange.ts,
     };
@@ -415,7 +438,7 @@ export async function captureAll(
   cfg: Config,
   db: Db,
   embedder: Embedder,
-  opts: { tool?: Tool; sinceMs?: number | null } = {},
+  opts: { tool?: Tool; sinceMs?: number | null; force?: boolean } = {},
 ): Promise<SweepResult> {
   const sinceMs = opts.sinceMs ?? null;
   const targets: Array<{ tool: Tool; path: string }> = [];
@@ -439,7 +462,7 @@ export async function captureAll(
   const result: SweepResult = { files: targets.length, sessions: 0, embedded: 0, skipped: 0, errors: 0 };
   for (const { tool, path } of targets) {
     try {
-      const r = await captureFile(path, tool, cfg, db, embedder);
+      const r = await captureFile(path, tool, cfg, db, embedder, { force: opts.force });
       if (r.skipped) result.skipped++;
       else result.sessions++;
       result.embedded += r.embedded;

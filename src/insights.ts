@@ -7,6 +7,7 @@
 // Sessions. Do not add per-author roll-ups or team views here.
 
 import type { MetricsRow } from "./db.js";
+import { shortRepo } from "./normalize.js";
 
 /** Think-gaps up to this long count as "you prompting/thinking". */
 export const PROMPT_GAP_MAX_MS = 5 * 60_000;
@@ -72,6 +73,19 @@ export function formatNudge(streak: number, tokens: number): string {
   );
 }
 
+/** One repo's slice of a report — time tracked separately per project. */
+export interface RepoStat {
+  repo: string;
+  /** Time anatomy (ms). wall = prompt + away + work. */
+  promptMs: number;
+  awayMs: number;
+  workMs: number;
+  exchanges: number;
+  sessions: number;
+  /** input + output + cacheWrite (cache reads excluded), like the report total. */
+  freshTokens: number;
+}
+
 export interface InsightsReport {
   author: string | null;
   sinceIso: string | null;
@@ -81,6 +95,8 @@ export interface InsightsReport {
   promptMs: number;
   awayMs: number;
   workMs: number;
+  /** Per-repo breakdown, busiest (by wall time) first. Totals above are the sum. */
+  byRepo: RepoStat[];
   /** Token economy. */
   inputTokens: number;
   outputTokens: number;
@@ -113,6 +129,7 @@ export function computeInsights(
     promptMs: 0,
     awayMs: 0,
     workMs: 0,
+    byRepo: [],
     inputTokens: 0,
     outputTokens: 0,
     cacheReadTokens: 0,
@@ -132,17 +149,25 @@ export function computeInsights(
   const sessions = new Map<string, MetricsRow[]>();
   const hourCounts = new Array<number>(24).fill(0);
   const dayCounts = new Map<string, number>();
+  // Time tracked separately per repo; sessions counted per repo via a Set.
+  interface RepoAcc { promptMs: number; awayMs: number; workMs: number; exchanges: number; freshTokens: number; sessions: Set<string> }
+  const repoAcc = new Map<string, RepoAcc>();
 
   for (const r of rows) {
     const list = sessions.get(r.session_id);
     if (list) list.push(r);
     else sessions.set(r.session_id, [r]);
 
+    // Bucket this row's think gap once, then fold into both the total and repo.
+    let promptInc = 0;
+    let awayInc = 0;
     if (r.think_ms != null) {
-      if (r.think_ms <= PROMPT_GAP_MAX_MS) report.promptMs += r.think_ms;
-      else if (r.think_ms <= AWAY_GAP_MAX_MS) report.awayMs += r.think_ms;
+      if (r.think_ms <= PROMPT_GAP_MAX_MS) promptInc = r.think_ms;
+      else if (r.think_ms <= AWAY_GAP_MAX_MS) awayInc = r.think_ms;
       // longer gaps = left for the day; excluded by design
     }
+    report.promptMs += promptInc;
+    report.awayMs += awayInc;
     report.workMs += r.work_ms;
 
     report.inputTokens += r.input_tokens;
@@ -153,6 +178,19 @@ export function computeInsights(
     if (!report.topExchange || fresh > report.topExchange.freshTokens) {
       report.topExchange = { sessionId: r.session_id, ts: r.ts, repo: r.repo, freshTokens: fresh };
     }
+
+    const repoKey = r.repo ?? "unknown";
+    let acc = repoAcc.get(repoKey);
+    if (!acc) {
+      acc = { promptMs: 0, awayMs: 0, workMs: 0, exchanges: 0, freshTokens: 0, sessions: new Set() };
+      repoAcc.set(repoKey, acc);
+    }
+    acc.promptMs += promptInc;
+    acc.awayMs += awayInc;
+    acc.workMs += r.work_ms;
+    acc.exchanges++;
+    acc.freshTokens += fresh;
+    acc.sessions.add(r.session_id);
 
     if (r.is_correction) report.corrections++;
     report.errors += r.errors;
@@ -167,6 +205,18 @@ export function computeInsights(
   }
 
   report.sessions = sessions.size;
+
+  report.byRepo = [...repoAcc.entries()]
+    .map(([repo, a]): RepoStat => ({
+      repo,
+      promptMs: a.promptMs,
+      awayMs: a.awayMs,
+      workMs: a.workMs,
+      exchanges: a.exchanges,
+      sessions: a.sessions.size,
+      freshTokens: a.freshTokens,
+    }))
+    .sort((x, y) => y.promptMs + y.awayMs + y.workMs - (x.promptMs + x.awayMs + x.workMs));
 
   const denom = report.inputTokens + report.cacheReadTokens + report.cacheWriteTokens;
   report.cacheHitRate = denom > 0 ? report.cacheReadTokens / denom : null;
@@ -399,6 +449,20 @@ export function formatInsights(r: InsightsReport): string {
   lines.push(`  agent working            ${fmtDuration(r.workMs)}`);
   lines.push(`  you away (agent waited)  ${fmtDuration(r.awayMs)}`);
   lines.push("");
+  if (r.byRepo.length >= 2) {
+    lines.push(`By repo  (the total above is the sum)`);
+    const labels = new Map(r.byRepo.map((b) => [b.repo, shortRepo(b.repo)]));
+    const nameW = Math.min(24, Math.max(...[...labels.values()].map((l) => l.length)));
+    for (const b of r.byRepo) {
+      const repoWall = b.promptMs + b.awayMs + b.workMs;
+      lines.push(
+        `  ${labels.get(b.repo)!.padEnd(nameW)}  ${fmtDuration(repoWall).padStart(8)}  ` +
+          `(${fmtDuration(b.promptMs)} you · ${fmtDuration(b.workMs)} agent)  ` +
+          `${b.sessions} session${b.sessions === 1 ? "" : "s"} · ${fmtTokens(b.freshTokens)} tok`,
+      );
+    }
+    lines.push("");
+  }
   lines.push(
     `Tokens  ${fmtTokens(r.inputTokens + r.outputTokens + r.cacheWriteTokens)} fresh ` +
       `(${fmtTokens(r.outputTokens)} out) + ${fmtTokens(r.cacheReadTokens)} cache reads` +

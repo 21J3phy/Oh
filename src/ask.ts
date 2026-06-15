@@ -6,6 +6,7 @@
 import type { AskHit, Config } from "./types.js";
 import type { Db, MatchFilters, MatchRow } from "./db.js";
 import type { Embedder } from "./embed.js";
+import { shortRepo } from "./normalize.js";
 import { scrubText } from "./scrub.js";
 import { log } from "./log.js";
 
@@ -122,7 +123,7 @@ export function formatAskResult(result: AskResult): string {
     const snippet = h.text.length > SNIPPET_CHARS ? h.text.slice(0, SNIPPET_CHARS) + "…" : h.text;
     lines.push(
       "",
-      `[${i + 1}] ${h.who} · ${h.tool} · ${h.repo ?? "?"} · ${h.ts} · session ${sid} (sim ${h.similarity.toFixed(2)})`,
+      `[${i + 1}] ${h.who} · ${h.tool} · ${shortRepo(h.repo)} · ${h.ts} · session ${sid} (sim ${h.similarity.toFixed(2)})`,
       snippet,
     );
   });

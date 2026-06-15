@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { toExchanges, repoFromCwd } from "../src/normalize.js";
+import { toExchanges, repoFromCwd, shortRepo } from "../src/normalize.js";
 import type { ParseResult } from "../src/types.js";
 
 function fixture(): ParseResult {
@@ -51,6 +51,13 @@ test("repoFromCwd uses the basename and tolerates trailing slashes / empties", (
   assert.equal(repoFromCwd("/a/b/scientific-raisin/"), "scientific-raisin");
   assert.equal(repoFromCwd(""), "unknown");
   assert.equal(repoFromCwd(null), "unknown");
+});
+
+test("shortRepo labels a git-remote identity by its last segment", () => {
+  assert.equal(shortRepo("github.com/21j3phy/aydhi"), "aydhi");
+  assert.equal(shortRepo("aydhi"), "aydhi", "a basename fallback is returned as-is");
+  assert.equal(shortRepo(null), "?");
+  assert.equal(shortRepo(""), "?");
 });
 
 test("returns nothing when there is no human prompt", () => {
