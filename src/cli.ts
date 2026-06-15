@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import {
   CONFIG_PATH,
+  LOCAL_DIR,
   OFFSETS_DIR,
   SCHEMA_OUT_PATH,
   ensureDirs,
@@ -29,6 +30,7 @@ import { ask, formatAskResult, parseSince } from "./ask.js";
 import { computeInsights, formatInsights, generateTips } from "./insights.js";
 import { formatDailyHistory, readInsightsCache, refreshInsightsCache } from "./brief.js";
 import { runMcpServer } from "./mcp.js";
+import { DEFAULT_LOCAL_MODEL as LOCAL_MODEL } from "./local/embed.js";
 import { runHook } from "./hook.js";
 import { registerAll, installSkill } from "./register.js";
 import { bareHostedClient, hostedClient, hostedConfigured } from "./hosted.js";
@@ -78,6 +80,13 @@ function sinceMsFrom(s: string | undefined): number | null {
 
 const USAGE = `Oh — give your AI a past.
 
+Local (fully offline — no cloud, no API, nothing leaves the machine — ADR 0013):
+  oh init --local [--yes] Configure ~/.oh for an on-device store (~/.oh/local) and
+                          an in-process embedding model, then wire Claude/Codex/
+                          Copilot. No keys, no account, no Supabase. The easiest
+                          thing for a security-locked org to approve.
+                          (then) oh backfill, then restart your agents.
+
 Hosted (no keys — ADR 0010):
   oh signup [--email E]   Create your hosted Oh account (then confirm via email).
   oh login [--email E]    Log in; stores your session in ~/.oh.
@@ -126,6 +135,7 @@ interface InitOpts {
   yes?: boolean;
   noWire?: boolean;
   repos?: string[];
+  local?: boolean;
 }
 
 function printInitNextSteps(): void {
@@ -136,10 +146,61 @@ function printInitNextSteps(): void {
   console.log('  4. Use the `ask` tool from either: "why did we …?"');
 }
 
+/** Wire (and optionally backfill) for a keyless mode — shared by hosted/local. */
+async function wireOnly(interactive: boolean, yes: boolean, nextLine: string): Promise<void> {
+  const plan = wire(false);
+  for (const c of plan.changed) console.log(`  + ${c}`);
+  for (const s of plan.skipped) console.log(`  · ${s}`);
+  let apply = yes;
+  if (!apply && interactive && plan.changed.length > 0) {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    const a = (await rl.question("\nApply this wiring? (files are backed up first) [y/N] ")).trim().toLowerCase();
+    rl.close();
+    apply = a === "y" || a === "yes";
+  }
+  if (apply && plan.changed.length > 0) {
+    const res = wire(true);
+    console.log("✓ wired:");
+    for (const c of res.changed) console.log(`  + ${c}`);
+    for (const n of res.notes) console.log(`note: ${n}`);
+  }
+  console.log(nextLine);
+}
+
 async function cmdInit(opts: InitOpts): Promise<void> {
   ensureDirs();
   const existing = readPartialConfig();
   const interactive = process.stdin.isTTY === true;
+
+  // Local mode (ADR 0013): nothing leaves the machine — no keys, no schema, no
+  // cloud. Just a name to attribute Sessions to, then wire + backfill locally.
+  if (opts.local || existing.mode === "local") {
+    let author = opts.author ?? existing.author ?? "";
+    if (!author && interactive) {
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      author = (await rl.question("Your name (attributed to your Sessions): ")).trim() || "me";
+      rl.close();
+    }
+    saveConfig({
+      mode: "local",
+      author: author || "me",
+      embeddingModel: LOCAL_MODEL,
+      ...(opts.repos && opts.repos.length > 0 ? { repos: opts.repos } : {}),
+    });
+    console.log(`✓ wrote ${CONFIG_PATH} (mode: local — fully offline, nothing leaves this machine)`);
+    if (opts.noWire) {
+      console.log("Skipped wiring (--no-wire).");
+    } else {
+      console.log("\nPlanned wiring (Claude & Codex: hooks + `ask` MCP + ask-why skill; Copilot: `ask` MCP):");
+      await wireOnly(interactive, opts.yes === true, "");
+    }
+    console.log("\nNext:");
+    console.log("  1. `oh backfill` — seeds a LOCAL store under ~/.oh/local from your existing sessions.");
+    console.log("     (first run fetches a ~23MB embedding model into ~/.oh/models, then never hits the network).");
+    console.log("  2. Restart Claude/Codex/Copilot to load the MCP server + hooks + skill.");
+    console.log('  3. Use the `ask` tool from either: "why did we …?" — answered entirely on-device.');
+    return;
+  }
 
   // Hosted mode: no keys, no schema — login/team already happened; just wire.
   if (existing.mode === "hosted") {
@@ -540,12 +601,15 @@ async function cmdStatus(): Promise<void> {
   const cfg = loadConfig();
   let host = cfg.supabaseUrl ?? "";
   try {
-    host = new URL(cfg.supabaseUrl).host;
+    host = new URL(cfg.supabaseUrl ?? "").host;
   } catch {
     /* keep raw */
   }
   console.log(`author:    ${cfg.author}`);
-  if (cfg.mode === "hosted") {
+  if (cfg.mode === "local") {
+    console.log(`mode:      local (fully offline — nothing leaves this machine)`);
+    console.log(`store:     ${LOCAL_DIR}`);
+  } else if (cfg.mode === "hosted") {
     console.log(`mode:      hosted (${cfg.hosted?.email ?? "?"})`);
     console.log(`team:      ${cfg.hosted?.teamId ?? "none"} (invite: ${cfg.hosted?.inviteCode ?? "—"})`);
   } else {
@@ -606,6 +670,7 @@ async function main(): Promise<void> {
       "supabase-key": { type: "string" },
       "openai-key": { type: "string" },
       "no-wire": { type: "boolean" },
+      local: { type: "boolean" },
       repos: { type: "string" },
       who: { type: "string" },
       repo: { type: "string" },
@@ -637,6 +702,7 @@ async function main(): Promise<void> {
         openaiKey: values["openai-key"],
         yes: Boolean(values.yes),
         noWire: Boolean(values["no-wire"]),
+        local: Boolean(values.local),
         repos: values.repos
           ? values.repos.split(",").map((s) => s.trim()).filter(Boolean)
           : undefined,

@@ -4,6 +4,7 @@
 
 import OpenAI from "openai";
 import { EMBED_ENDPOINT, hostedClient } from "./hosted.js";
+import { localEmbed } from "./local/embed.js";
 import type { Config } from "./types.js";
 
 // ~4 chars/token; stay well under the model's 8191-token input limit and keep
@@ -24,7 +25,11 @@ export interface Embedder {
 
 export function createEmbedder(cfg: Config): Embedder {
   const embed =
-    cfg.mode === "hosted" ? hostedEmbed(cfg) : selfhostEmbed(cfg);
+    cfg.mode === "local"
+      ? localEmbed(cfg)
+      : cfg.mode === "hosted"
+        ? hostedEmbed(cfg)
+        : selfhostEmbed(cfg);
 
   return {
     embed,
@@ -37,7 +42,7 @@ export function createEmbedder(cfg: Config): Embedder {
 }
 
 function selfhostEmbed(cfg: Config): (texts: string[]) => Promise<number[][]> {
-  const client = new OpenAI({ apiKey: cfg.openaiKey });
+  const client = new OpenAI({ apiKey: cfg.openaiKey! });
   const model = cfg.embeddingModel;
   return async (texts) => {
     const out: number[][] = [];

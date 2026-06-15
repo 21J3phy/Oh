@@ -5,6 +5,7 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { hostedClient, tenantCols } from "./hosted.js";
+import { createLocalDb } from "./local/store.js";
 import type { Config, Exchange, SessionMeta, Tool } from "./types.js";
 
 const UPSERT_BATCH = 200;
@@ -93,6 +94,8 @@ export interface Db {
 }
 
 export function createDb(cfg: Config): Db {
+  // Local mode never touches the network — the brain is files under ~/.oh/local.
+  if (cfg.mode === "local") return createLocalDb();
   // Hosted mode authenticates lazily (token refresh may rewrite config);
   // self-host keeps the original direct client.
   const hosted = cfg.mode === "hosted";
@@ -102,7 +105,7 @@ export function createDb(cfg: Config): Db {
       clientPromise = hosted
         ? hostedClient(cfg)
         : Promise.resolve(
-            createClient(cfg.supabaseUrl, cfg.supabaseKey, {
+            createClient(cfg.supabaseUrl!, cfg.supabaseKey!, {
               auth: { persistSession: false, autoRefreshToken: false },
             }),
           );

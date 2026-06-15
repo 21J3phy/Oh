@@ -16,6 +16,11 @@ export const CONFIG_PATH = join(OH_DIR, "config.json");
 export const OFFSETS_DIR = join(OH_DIR, "offsets");
 export const LOGS_DIR = join(OH_DIR, "logs");
 export const NUDGES_DIR = join(OH_DIR, "nudges");
+/** Local-mode store (mode === "local"): the whole Team Brain, on this machine. */
+export const LOCAL_DIR = join(OH_DIR, "local");
+/** Where the in-process embedding model is cached so it works offline forever
+ *  after a single first fetch (air-gap: copy this dir onto the target machine). */
+export const MODELS_DIR = join(OH_DIR, "models");
 export const SCHEMA_OUT_PATH = join(OH_DIR, "schema.sql");
 export const INSIGHTS_CACHE_PATH = join(OH_DIR, "insights-cache.json");
 /** Per-day totals, keyed by local YYYY-MM-DD — survives the day rolling over so
@@ -60,6 +65,11 @@ export function loadConfig(): Config {
     throw new Error(`Could not parse ${CONFIG_PATH}: ${(err as Error).message}`);
   }
   const cfg = { ...DEFAULTS, ...raw } as Config;
+  if (cfg.mode === "local") {
+    // Local mode needs no keys at all — that's the whole point (ADR 0013).
+    if (!cfg.author) throw new Error("Oh local config is missing author. Run `oh init --local`.");
+    return cfg;
+  }
   if (cfg.mode === "hosted") {
     // Hosted mode needs no keys — auth lives in the hosted block (ADR 0010).
     if (!cfg.author) throw new Error("Oh config is missing author. Run `oh login`.");
