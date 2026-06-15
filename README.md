@@ -5,7 +5,7 @@
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
 
-> **Landing page:** https://oh-landing-mu.vercel.app · source in [`site/`](./site/), deploy with `cd site && vercel deploy --prod`.
+> **Landing page:** https://oh-landing-mu.vercel.app — source is [`web/public/index.html`](./web/public/index.html) (the [`web/`](./web/) Next.js project serves it at `/` via a rewrite, and owns `/login`, `/dashboard`, `/api/embed`). The Vercel project's Root Directory is `web/`, so deploy **from the repo root**: `vercel deploy --prod` (one-time: `vercel link --project oh-landing`).
 >
 > **Contributing?** Start with [CONTRIBUTING.md](./CONTRIBUTING.md). Oh is **open core** — the CLI/MCP, schema, and skills are Apache-2.0; `web/` (Oh Cloud) is commercial ([ADR 0012](./docs/adr/0012-apache-core-commercial-cloud.md)).
 
@@ -66,6 +66,18 @@ Restart Claude Code and Codex (approve the one-time Codex hook-trust prompt), th
 > 6. Run: `oh backfill`
 > 7. Tell me to fully restart Claude Code and Codex (approve the Codex hook-trust prompt), verify with `oh status`, and show me the invite code from `oh team` to share with teammates.
 
+**Local — fully offline (no cloud, no API, no keys — three commands):**
+
+The whole Engine runs on your machine: the store lives on disk under `~/.oh/local` and embeddings run **in-process** (a small on-device model). No account, no Supabase, no OpenAI key, no network egress — the easiest version for a security-locked org to approve, and it works on an air-gapped box. You get **Recall** and **Insights**; only the *shared* team brain needs hosted or self-host ([ADR 0013](./docs/adr/0013-local-mode-fully-offline-enterprise-onramp.md)).
+
+```bash
+npm install -g oh-brain
+oh init --local --yes   # on-device store + in-process model — wires Claude & Codex, no keys, no account
+oh backfill             # first run fetches a ~23MB model into ~/.oh/models, then it never touches the network again
+```
+
+Restart Claude Code and Codex, then ask away — *"what did I work on last week?"*, answered entirely on-device. Air-gapped? Pre-seed `~/.oh/models` from a connected machine and set `OH_OFFLINE=1` so it never reaches for the network at all.
+
 **Self-host (also free, forever):** your memory in *your* Supabase project, embeddings on *your* OpenAI key — same CLI, same features. `oh migrate` (paste `~/.oh/schema.sql` into your project's SQL editor once) → `oh init` (enter your keys) → `oh backfill`. See [One-time project setup](#one-time-project-setup-one-person-does-this) below.
 
 Prereq: **Node ≥ 20**. Working on Oh itself? Clone the repo, `npm install && npm run build`, then run `node dist/cli.js` (or `npm run dev -- <args>`). See [CONTRIBUTING.md](./CONTRIBUTING.md).
@@ -101,6 +113,11 @@ Claude/Codex session files  ──(Stop/SessionEnd hook)──▶  oh capture
   synthesizes the answer. Results are re-ranked by **similarity + a recency
   boost**, so when a decision was reversed across Sessions you get the *current*
   one.
+- **Local mode swaps the two networked steps for on-device equivalents** — the
+  OpenAI embed call becomes an in-process model and the Supabase store becomes
+  files under `~/.oh/local` (brute-force cosine search). Everything above —
+  capture, scrub, `ask`, insights, the brief — is identical
+  ([ADR 0013](./docs/adr/0013-local-mode-fully-offline-enterprise-onramp.md)).
 
 ## Prerequisites
 
@@ -223,6 +240,7 @@ control — not anonymization — is Oh's answer to the chilling effect
 | Command | What it does |
 |---|---|
 | `oh init` | Configure, print schema, wire Claude + Codex. |
+| `oh init --local` | Fully-offline mode — on-device store (`~/.oh/local`) + in-process embeddings, no keys/account/cloud ([ADR 0013](./docs/adr/0013-local-mode-fully-offline-enterprise-onramp.md)). |
 | `oh migrate` | (Re)write `~/.oh/schema.sql` to paste into Supabase. |
 | `oh backfill [--since W]` | Seed the store from existing sessions. |
 | `oh insights [--since W] [--repo R]` | Time/token/friction report — your own sessions only. |
@@ -236,7 +254,7 @@ control — not anonymization — is Oh's answer to the chilling effect
 
 | Field | Default | Meaning |
 |---|---|---|
-| `embeddingModel` | `text-embedding-3-small` | Must stay fixed for a store (1536-dim is baked into the schema). |
+| `embeddingModel` | `text-embedding-3-small` (`Xenova/all-MiniLM-L6-v2` in local mode) | Must stay fixed for a store (the vector dimension is baked in). Local mode uses an on-device model; set `OH_OFFLINE=1` to forbid any model re-fetch. |
 | `includeThinking` | `true` | Include assistant reasoning/thinking blocks in the embedded text. |
 | `recencyHalfLifeDays` | `30` | Recency decay half-life for re-ranking. |
 | `recencyWeight` | `0.25` | Weight of recency vs. cosine similarity. |
