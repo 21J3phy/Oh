@@ -49,6 +49,11 @@ function kickCopilotCapture(cliPath: string): void {
 
 export async function runMcpServer(cliPath?: string): Promise<void> {
   const cfg = loadConfig();
+  if (cfg.insightsOnly) {
+    // Insights-only installs never register this server (ADR 0014); if one is
+    // launched anyway, refuse rather than advertise an `ask` we can't answer.
+    throw new Error("Oh is in insights-only mode — the `ask` MCP server is disabled. Run `oh init --local` for memory + ask.");
+  }
   const db = createDb(cfg);
   const embedder = createEmbedder(cfg);
   if (cliPath) kickCopilotCapture(cliPath);
