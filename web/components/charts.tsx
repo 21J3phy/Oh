@@ -37,11 +37,61 @@ function ChartTip({ active, payload, label, fmt }: any) {
   );
 }
 
+// A day's one-line "what I worked on" — the top repos by fresh spend that day.
+function daySummary(d: DayBucket): string {
+  const repos = d.repos.filter((r) => r.repo !== "unknown");
+  const named = (repos.length ? repos : d.repos).slice(0, 2).map((r) => r.repo);
+  if (named.length === 0) return "";
+  const more = d.repos.length - named.length;
+  return named.join(" · ") + (more > 0 ? ` +${more}` : "");
+}
+
+// Indices that are relative maxima worth labelling: a local max in total tokens
+// that clears a noise floor (15% of the window's tallest day). Endpoints count
+// when they out-rank their single neighbour.
+function peakIndices(totals: number[]): number[] {
+  const max = Math.max(...totals, 0);
+  if (max <= 0) return [];
+  const floor = max * 0.15;
+  const out: number[] = [];
+  for (let i = 0; i < totals.length; i++) {
+    const v = totals[i]!;
+    if (v < floor) continue;
+    const l = i > 0 ? totals[i - 1]! : -Infinity;
+    const r = i < totals.length - 1 ? totals[i + 1]! : -Infinity;
+    if (v >= l && v >= r) out.push(i);
+  }
+  return out;
+}
+
 export function TokensTrend({ data }: { data: DayBucket[] }) {
-  const rows = data.map((d) => ({ day: fmtDate(d.day), fresh: d.freshTokens, cache: d.cacheReadTokens }));
+  const rows = data.map((d) => ({
+    day: fmtDate(d.day),
+    fresh: d.freshTokens,
+    cache: d.cacheReadTokens,
+    summary: daySummary(d),
+  }));
+  const peaks = new Set(peakIndices(data.map((d) => d.freshTokens + d.cacheReadTokens)));
+
+  // Custom dot on the (visually dominant) cache curve: label the day's work at peaks.
+  const PeakLabel = (props: { cx?: number; cy?: number; index?: number }) => {
+    const { cx, cy, index } = props;
+    if (cx == null || cy == null || index == null || !peaks.has(index)) return <g />;
+    const summary = rows[index]?.summary;
+    if (!summary) return <g />;
+    return (
+      <g>
+        <circle cx={cx} cy={cy} r={3} fill={PHOS} stroke="#131210" strokeWidth={1.5} />
+        <text x={cx} y={cy - 11} textAnchor="middle" fill="#e8e0d0" fontSize={11} fontFamily="Spline Sans Mono, monospace" style={{ letterSpacing: "0.02em" }}>
+          {summary}
+        </text>
+      </g>
+    );
+  };
+
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <AreaChart data={rows} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height={240}>
+      <AreaChart data={rows} margin={{ top: 26, right: 12, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id="gFresh" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={PHOS} stopOpacity={0.5} />
@@ -56,8 +106,8 @@ export function TokensTrend({ data }: { data: DayBucket[] }) {
         <XAxis dataKey="day" {...axis} tickLine={false} />
         <YAxis {...axis} tickLine={false} width={44} tickFormatter={(v) => fmtTokens(v)} />
         <Tooltip content={<ChartTip fmt={fmtTokens} />} />
-        <Area type="monotone" dataKey="cache" name="cache reads" stroke={CITE} fill="url(#gCache)" strokeWidth={1.5} />
         <Area type="monotone" dataKey="fresh" name="fresh tokens" stroke={PHOS} fill="url(#gFresh)" strokeWidth={1.5} />
+        <Area type="monotone" dataKey="cache" name="cache reads" stroke={CITE} fill="url(#gCache)" strokeWidth={1.5} dot={<PeakLabel />} activeDot={false} />
       </AreaChart>
     </ResponsiveContainer>
   );
