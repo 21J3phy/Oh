@@ -65,6 +65,8 @@
   nav { display: flex; gap: 26px; font-size: 12.5px; }
   nav a { color: var(--bone-dim); text-decoration: none; letter-spacing: 0.04em; }
   nav a:hover { color: var(--phos); }
+  nav a.signin { color: var(--phos); }
+  nav a.signin:hover { color: var(--bone); }
 
   /* ---- hero ---- */
   .hero { padding: 100px 0 30px; }
@@ -346,6 +348,7 @@
       <a href="#how">how</a>
       <a href="#get">get the beta</a>
       <a href="#pricing">pricing</a>
+      <a class="signin" href="/login">sign in</a>
     </nav>
   </header>
 
@@ -356,6 +359,7 @@
     <div class="cta-row">
       <a class="btn" href="#get">Install the beta — it's free</a>
       <a class="btn ghost" href="#how">How it works ↓</a>
+      <a class="btn ghost" href="/login">Open the app →</a>
     </div>
 
     <div class="term" id="term">
