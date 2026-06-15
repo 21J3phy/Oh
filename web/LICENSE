@@ -1,0 +1,28 @@
+Oh Commercial License (Hosted Control Plane)
+
+Copyright 2026 Oh (Vinay Surabhi). All rights reserved.
+
+This directory ("Oh Cloud" — the hosted, multi-tenant control plane: account
+and team management, billing, the embedding proxy, and the web dashboard) is
+NOT covered by the Apache License 2.0 that governs the Oh core (the `oh-brain`
+CLI/MCP package in `../src`, the self-host schema in `../migrations`, and the
+agent skills in `../skills`).
+
+This code is provided as source-available for transparency and for use by the
+Licensor only. You may NOT, without a separate written commercial agreement
+with the Licensor:
+
+  - provide this software, or any substantial part of its functionality, to
+    third parties as a hosted or managed service; or
+  - operate a multi-tenant deployment of Oh for parties other than yourself or
+    your own organization; or
+  - redistribute, sublicense, or sell this code or derivative works of it.
+
+What this restriction does NOT touch: the Oh core under Apache 2.0 remains
+fully open. You may self-host Oh for free, forever, on your own infrastructure
+and your own keys (see the root README) — that path does not use this control
+plane and carries none of these restrictions.
+
+Enterprise features (SSO, audit logging, visibility-policy controls, and
+deploy-in-your-cloud) are likewise licensed commercially. Contact the Licensor
+for terms.

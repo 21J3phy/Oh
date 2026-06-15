@@ -29,7 +29,7 @@ go-to-market wedge is the re-explaining loop.
 
 ## Get Started
 
-Oh is in **open beta** — installable by anyone from npm (`oh-brain`; the CLI is `oh`), free, **hosted, no keys**. Source-available under the [Elastic License 2.0](./LICENSE): use it, modify it, self-host it for your team — just don't resell it as a hosted service.
+Oh is in **open beta** — installable by anyone from npm (`oh-brain`; the CLI is `oh`), free, **hosted, no keys**. The Oh **core** (this CLI/MCP package, the self-host schema, and the agent skills) is **open source under the [Apache License 2.0](./LICENSE)** — use it, modify it, build on it, self-host it for free forever. Only **Oh Cloud** (the hosted multi-tenant control plane in [`web/`](./web/LICENSE)) and enterprise features (SSO, audit, deploy-in-your-cloud) are licensed commercially. See [ADR 0012](./docs/adr/0012-apache-core-commercial-cloud.md).
 
 **Hosted (the default — five commands):**
 

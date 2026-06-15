@@ -3,7 +3,7 @@
   "version": "0.3.3",
   "description": "Oh — give your AI a past. The verbatim memory layer for AI coding: every Claude Code + Codex session becomes memory your agent can recall (yours to recall, your team's to ask, your week to see).",
   "type": "module",
-  "license": "Elastic-2.0",
+  "license": "Apache-2.0",
   "homepage": "https://oh-landing-mu.vercel.app",
   "keywords": [
     "ai",
