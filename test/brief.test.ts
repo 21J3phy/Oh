@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatBrief, shouldShowBrief, type InsightsCache } from "../src/brief.js";
+import { formatBrief, formatTokenChart, shouldShowBrief, type DailyStat, type InsightsCache } from "../src/brief.js";
 import { computeInsights } from "../src/insights.js";
 import type { MetricsRow } from "../src/db.js";
 
@@ -101,6 +101,21 @@ test("lastSnippet strips the User: prefix and truncates long prompts", async () 
   assert.ok(lastSnippet(long).endsWith("…"));
 });
 
+test("formatBrief: adds a by-repo line when today spans more than one repo", () => {
+  const oneRepo = [row({ id: "a:0", session_id: "a", repo: "aydhi" })];
+  assert.ok(!formatBrief(cache(oneRepo, oneRepo))!.includes("by repo:"), "single repo → no split line");
+
+  const twoRepos = [
+    row({ id: "a:0", session_id: "a", repo: "aydhi", work_ms: 120_000 }),
+    row({ id: "b:0", session_id: "b", repo: "Oh", work_ms: 60_000 }),
+  ];
+  const msg = formatBrief(cache(twoRepos, twoRepos))!;
+  const line = msg.split("\n").find((l) => l.includes("by repo:"));
+  assert.ok(line, "two repos → split line present");
+  // busiest repo first
+  assert.ok(line!.indexOf("aydhi") < line!.indexOf("Oh"), line);
+});
+
 test("formatBrief: surfaces rabbit holes, returns null on an empty week", () => {
   const holes = [
     row({ id: "s1:0", exchange_index: 0, is_correction: true }),
@@ -112,4 +127,54 @@ test("formatBrief: surfaces rabbit holes, returns null on an empty week", () => 
   assert.ok(msg.includes("1 rabbit hole"), "rabbit holes make the brief");
 
   assert.equal(formatBrief(cache([], [])), null, "empty week → stay silent");
+});
+
+function day(over: Partial<DailyStat>): DailyStat {
+  return {
+    date: "2026-06-10",
+    promptMs: 0,
+    awayMs: 0,
+    workMs: 0,
+    exchanges: 1,
+    sessions: 1,
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheWriteTokens: 0,
+    ...over,
+  };
+}
+
+test("formatTokenChart: one stacked bar per day, split by agent, busiest day fills the bar", () => {
+  const days = [
+    day({ date: "2026-06-09", inputTokens: 1_000_000, byTool: { claude: 600_000, codex: 400_000 } }),
+    day({ date: "2026-06-10", inputTokens: 200_000, byTool: { claude: 100_000, copilot: 100_000 } }),
+  ];
+  const chart = formatTokenChart(days);
+  const lines = chart.split("\n");
+  // Legend only names agents that actually spent tokens this window.
+  assert.ok(lines[0]!.startsWith("Tokens by agent"), lines[0]);
+  assert.ok(lines[0]!.includes("█ claude") && lines[0]!.includes("▓ codex") && lines[0]!.includes("▒ copilot"));
+
+  const big = lines.find((l) => l.startsWith("2026-06-09"))!;
+  const small = lines.find((l) => l.startsWith("2026-06-10"))!;
+  const barLen = (l: string) => (l.match(/[█▓▒░]/g) ?? []).length;
+  assert.equal(barLen(big), 22, "busiest day fills the full width");
+  assert.ok(barLen(big) > barLen(small), "lighter day gets a shorter bar");
+  assert.ok(big.includes("█") && big.includes("▓"), "claude + codex segments present");
+  assert.ok(small.includes("█") && small.includes("▒"), "claude + copilot segments present");
+  assert.ok(big.trimEnd().endsWith("1.0M"), big);
+});
+
+test("formatTokenChart: days without a recorded split fall back to an untracked fill", () => {
+  const days = [
+    day({ date: "2026-06-08", inputTokens: 500_000 }), // pre-byTool day
+    day({ date: "2026-06-09", inputTokens: 500_000, byTool: { claude: 500_000 } }),
+  ];
+  const chart = formatTokenChart(days);
+  assert.ok(chart.includes("░"), "untracked glyph used for the split-less day");
+  assert.ok(chart.includes("recorded before the per-agent split"), "footnote explains the faint fill");
+});
+
+test("formatTokenChart: nothing to chart when no day has tokens", () => {
+  assert.equal(formatTokenChart([day({ inputTokens: 0 })]), "");
 });

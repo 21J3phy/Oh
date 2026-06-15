@@ -213,3 +213,48 @@ test("formatters render without blowing up, including the empty case", () => {
   assert.ok(full.includes("alice's vibecoding"));
   assert.ok(full.includes("agent working"));
 });
+
+// --- per-repo time tracking --------------------------------------------------
+
+test("computeInsights: time is tracked separately per repo and totals are the sum", () => {
+  const rows = [
+    // aydhi: two sessions, 60s + 60s work, one prompt gap of 60s
+    row({ id: "a:0", session_id: "a", repo: "aydhi", exchange_index: 0 }),
+    row({ id: "a:1", session_id: "a", repo: "aydhi", exchange_index: 1, ts: "2026-05-01T10:02:00Z", ended_at: "2026-05-01T10:03:00Z", think_ms: 60_000 }),
+    row({ id: "b:0", session_id: "b", repo: "aydhi", exchange_index: 0 }),
+    // Oh: one session, 60s work
+    row({ id: "c:0", session_id: "c", repo: "Oh", exchange_index: 0 }),
+  ];
+  const r = computeInsights(rows, { author: "alice" });
+
+  assert.equal(r.byRepo.length, 2);
+  // busiest (by wall time) first → aydhi (180s work + 60s prompt) before Oh (60s)
+  assert.equal(r.byRepo[0]!.repo, "aydhi");
+  assert.equal(r.byRepo[1]!.repo, "Oh");
+
+  const aydhi = r.byRepo.find((b) => b.repo === "aydhi")!;
+  const oh = r.byRepo.find((b) => b.repo === "Oh")!;
+  assert.equal(aydhi.workMs, 180_000);
+  assert.equal(aydhi.promptMs, 60_000);
+  assert.equal(aydhi.sessions, 2);
+  assert.equal(aydhi.exchanges, 3);
+  assert.equal(oh.workMs, 60_000);
+  assert.equal(oh.sessions, 1);
+
+  // The report totals are exactly the per-repo sums.
+  assert.equal(r.workMs, aydhi.workMs + oh.workMs);
+  assert.equal(r.promptMs, aydhi.promptMs + oh.promptMs);
+  assert.equal(r.sessions, aydhi.sessions + oh.sessions);
+});
+
+test("formatInsights: shows a By repo breakdown only when more than one repo", () => {
+  const one = formatInsights(computeInsights([row({ repo: "solo" })], { author: "alice" }));
+  assert.ok(!one.includes("By repo"), "single repo → no breakdown noise");
+
+  const many = formatInsights(
+    computeInsights([row({ id: "a:0", repo: "aydhi" }), row({ id: "b:0", session_id: "b", repo: "Oh" })], { author: "alice" }),
+  );
+  assert.ok(many.includes("By repo"), "two repos → breakdown shown");
+  assert.ok(many.includes("aydhi"));
+  assert.ok(many.includes("Oh"));
+});

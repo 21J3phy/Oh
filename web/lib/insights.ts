@@ -234,6 +234,15 @@ export interface RepoDay {
   sessions: number;
 }
 
+// Fresh tokens split by the agent that spent them. Keys mirror the CLI's Tool
+// union (src/types.ts) so the stacked chart can name each agent; a tool the
+// window never used simply stays 0.
+export interface ToolTokens {
+  claude: number;
+  codex: number;
+  copilot: number;
+}
+
 export interface DayBucket {
   day: string; // YYYY-MM-DD
   freshTokens: number;
@@ -246,6 +255,7 @@ export interface DayBucket {
   errors: number;
   sessions: number; // distinct sessions touched that day
   repos: RepoDay[]; // ranked by freshTokens desc — the day's "what"
+  byTool: ToolTokens; // fresh tokens split by agent — the per-agent stacked chart
 }
 
 export function bucketByDay(rows: MetricsRow[]): DayBucket[] {
@@ -260,13 +270,14 @@ export function bucketByDay(rows: MetricsRow[]): DayBucket[] {
     const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     let b = buckets.get(day);
     if (!b) {
-      b = { day, freshTokens: 0, cacheReadTokens: 0, workMs: 0, promptMs: 0, awayMs: 0, exchanges: 0, corrections: 0, errors: 0, sessions: 0, repos: [] };
+      b = { day, freshTokens: 0, cacheReadTokens: 0, workMs: 0, promptMs: 0, awayMs: 0, exchanges: 0, corrections: 0, errors: 0, sessions: 0, repos: [], byTool: { claude: 0, codex: 0, copilot: 0 } };
       buckets.set(day, b);
       daySessions.set(day, new Set());
       dayRepos.set(day, new Map());
     }
     const fresh = r.input_tokens + r.output_tokens + r.cache_write_tokens;
     b.freshTokens += fresh;
+    if (r.tool in b.byTool) b.byTool[r.tool as keyof ToolTokens] += fresh;
     b.cacheReadTokens += r.cache_read_tokens;
     b.workMs += r.work_ms;
     if (r.think_ms != null) {

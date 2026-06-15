@@ -12,6 +12,17 @@ export function repoFromCwd(cwd: string | null | undefined): string {
   return name || "unknown";
 }
 
+/**
+ * A readable label for a stored repo identity. The `repo` column holds a git
+ * remote (e.g. "github.com/21j3phy/aydhi") or a basename fallback; for display
+ * we want just the project name ("aydhi"). Returns the last path segment.
+ */
+export function shortRepo(repo: string | null | undefined): string {
+  if (!repo) return "?";
+  const parts = repo.split("/").filter(Boolean);
+  return parts[parts.length - 1] ?? repo;
+}
+
 interface Group {
   events: ParsedEvent[];
   ts: string;

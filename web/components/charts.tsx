@@ -7,6 +7,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -109,6 +110,42 @@ export function TokensTrend({ data }: { data: DayBucket[] }) {
         <Area type="monotone" dataKey="fresh" name="fresh tokens" stroke={PHOS} fill="url(#gFresh)" strokeWidth={1.5} />
         <Area type="monotone" dataKey="cache" name="cache reads" stroke={CITE} fill="url(#gCache)" strokeWidth={1.5} dot={<PeakLabel />} activeDot={false} />
       </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+// Daily fresh-token spend, stacked by the agent that spent it. Only agents that
+// actually appear in the window get a series — a claude-only user sees one band,
+// not three. Mirrors `oh insights --history`'s "Tokens by agent" chart.
+const TOOL_SERIES: { key: "claude" | "codex" | "copilot"; label: string; color: string }[] = [
+  { key: "claude", label: "claude", color: PHOS },
+  { key: "codex", label: "codex", color: CITE },
+  { key: "copilot", label: "copilot", color: YOU },
+];
+
+export function TokensByAgent({ data }: { data: DayBucket[] }) {
+  const active = TOOL_SERIES.filter((t) => data.some((d) => (d.byTool?.[t.key] ?? 0) > 0));
+  if (active.length === 0) return <p className="faint">No per-agent token data in this window.</p>;
+  const rows = data.map((d) => ({
+    day: fmtDate(d.day),
+    ...Object.fromEntries(active.map((t) => [t.key, d.byTool?.[t.key] ?? 0])),
+  }));
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <BarChart data={rows} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
+        <CartesianGrid stroke={LINE} vertical={false} />
+        <XAxis dataKey="day" {...axis} tickLine={false} />
+        <YAxis {...axis} tickLine={false} width={44} tickFormatter={(v) => fmtTokens(v)} />
+        <Tooltip content={<ChartTip fmt={fmtTokens} />} cursor={{ fill: "rgba(245,181,74,0.06)" }} />
+        <Legend
+          iconType="square"
+          iconSize={9}
+          wrapperStyle={{ fontSize: 11, fontFamily: "Spline Sans Mono, monospace", color: BONE_FAINT }}
+        />
+        {active.map((t) => (
+          <Bar key={t.key} dataKey={t.key} name={t.label} stackId="tok" fill={t.color} />
+        ))}
+      </BarChart>
     </ResponsiveContainer>
   );
 }

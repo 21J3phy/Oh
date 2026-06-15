@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useAuth } from "@/components/auth";
-import { TokensTrend, ActivityByHour, FrictionTrend } from "@/components/charts";
+import { TokensTrend, TokensByAgent, ActivityByHour, FrictionTrend } from "@/components/charts";
 import { fetchOwnMetrics, fetchOwnChunkTexts } from "@/lib/queries";
 import {
   computeInsights,
@@ -120,6 +120,12 @@ function Dashboard() {
           <div className="section-title">Tokens over time</div>
           <div className="card">
             {days.length > 1 ? <TokensTrend data={days} /> : <p className="faint">Not enough days in this window to chart a trend.</p>}
+          </div>
+
+          {/* per-agent token split */}
+          <div className="section-title">Tokens by agent</div>
+          <div className="card">
+            {days.length > 1 ? <TokensByAgent data={days} /> : <p className="faint">Not enough days in this window to chart a trend.</p>}
           </div>
 
           <div className="grid cols-2">

@@ -14,8 +14,9 @@ import {
   ensureDirs,
 } from "./config.js";
 import { computeInsights, generateTips, type InsightsReport } from "./insights.js";
+import { shortRepo } from "./normalize.js";
 import type { Db, MetricsRow } from "./db.js";
-import type { Config } from "./types.js";
+import type { Config, Tool } from "./types.js";
 
 /** Don't render a cache older than this — better silence than stale numbers. */
 const CACHE_MAX_AGE_MS = 26 * 3_600_000;
@@ -55,6 +56,12 @@ export interface DailyStat {
   inputTokens: number;
   outputTokens: number;
   cacheWriteTokens: number;
+  /**
+   * Fresh tokens (input + output + cacheWrite) split by the agent that spent
+   * them — claude / codex / copilot. Optional: days frozen before this field
+   * existed won't carry it, so readers must tolerate its absence.
+   */
+  byTool?: Partial<Record<Tool, number>>;
 }
 
 /** Map of local YYYY-MM-DD → that day's totals (the on-disk shape). */
@@ -97,6 +104,10 @@ function persistDailyHistory(rows: MetricsRow[], author: string): void {
   }
   for (const [date, dayRows] of byDay) {
     const rep = computeInsights(dayRows, { author });
+    const byTool: Partial<Record<Tool, number>> = {};
+    for (const r of dayRows) {
+      byTool[r.tool] = (byTool[r.tool] ?? 0) + r.input_tokens + r.output_tokens + r.cache_write_tokens;
+    }
     history[date] = {
       date,
       promptMs: rep.promptMs,
@@ -107,6 +118,7 @@ function persistDailyHistory(rows: MetricsRow[], author: string): void {
       inputTokens: rep.inputTokens,
       outputTokens: rep.outputTokens,
       cacheWriteTokens: rep.cacheWriteTokens,
+      byTool,
     };
   }
   ensureDirs();
@@ -255,6 +267,74 @@ function ago(tsIso: string, nowMs: number): string {
   return `${Math.round(mins / (24 * 60))}d ago`;
 }
 
+/**
+ * Stacked token bars, one per day, split by the agent that spent them. Each
+ * agent owns a distinct block glyph; the bar is scaled so the busiest day fills
+ * BAR cols. Days frozen before `byTool` existed have no split — their tokens
+ * render as a faint "untracked" fill so the row still reads. Returns "" when no
+ * day carries token data (nothing to chart).
+ */
+const TOKEN_BAR_WIDTH = 22;
+const TOOL_GLYPHS: Array<{ tool: Tool; glyph: string }> = [
+  { tool: "claude", glyph: "█" },
+  { tool: "codex", glyph: "▓" },
+  { tool: "copilot", glyph: "▒" },
+];
+const UNTRACKED_GLYPH = "░";
+
+function freshOf(s: DailyStat): number {
+  return s.inputTokens + s.outputTokens + s.cacheWriteTokens;
+}
+
+/** Floor each segment proportionally, then hand leftover cols to the largest fractions. */
+function stackBar(perTool: Partial<Record<Tool, number>>, total: number, barLen: number): string {
+  if (barLen <= 0 || total <= 0) return "";
+  const raw = TOOL_GLYPHS.map((g) => ((perTool[g.tool] ?? 0) / total) * barLen);
+  const cols = raw.map(Math.floor);
+  let used = cols.reduce((a, b) => a + b, 0);
+  const byFrac = raw
+    .map((v, i) => ({ i, frac: v - Math.floor(v) }))
+    .sort((a, b) => b.frac - a.frac);
+  for (const { i } of byFrac) {
+    if (used >= barLen) break;
+    if ((perTool[TOOL_GLYPHS[i]!.tool] ?? 0) > 0) {
+      cols[i]!++;
+      used++;
+    }
+  }
+  return TOOL_GLYPHS.map((g, i) => g.glyph.repeat(cols[i]!)).join("");
+}
+
+export function formatTokenChart(days: DailyStat[]): string {
+  const maxFresh = Math.max(0, ...days.map(freshOf));
+  if (maxFresh === 0) return "";
+  const usedTools = new Set<Tool>();
+  for (const s of days) {
+    for (const g of TOOL_GLYPHS) if ((s.byTool?.[g.tool] ?? 0) > 0) usedTools.add(g.tool);
+  }
+  let anyUntracked = false;
+  const legend = TOOL_GLYPHS.filter((g) => usedTools.has(g.tool))
+    .map((g) => `${g.glyph} ${g.tool}`)
+    .join("  ");
+  const lines = [`Tokens by agent  (${legend})`];
+  for (const s of days) {
+    const fresh = freshOf(s);
+    const barLen = Math.round((fresh / maxFresh) * TOKEN_BAR_WIDTH);
+    let bar: string;
+    if (s.byTool && Object.keys(s.byTool).length > 0) {
+      const total = TOOL_GLYPHS.reduce((sum, g) => sum + (s.byTool![g.tool] ?? 0), 0);
+      bar = stackBar(s.byTool, total, barLen);
+    } else {
+      // No per-agent split recorded for this day — show its size, not its makeup.
+      bar = UNTRACKED_GLYPH.repeat(barLen);
+      if (fresh > 0) anyUntracked = true;
+    }
+    lines.push(`${s.date.padEnd(12)} ${bar.padEnd(TOKEN_BAR_WIDTH)} ${fmtTokens(fresh).padStart(7)}`);
+  }
+  if (anyUntracked) lines.push(`(${UNTRACKED_GLYPH} = older days, recorded before the per-agent split)`);
+  return lines.join("\n");
+}
+
 /** A right-aligned day-by-day table for `oh insights --history`. */
 export function formatDailyHistory(limit?: number): string {
   const all = readDailyHistory();
@@ -283,6 +363,8 @@ export function formatDailyHistory(limit?: number): string {
   lines.push(
     `${pad("total", 12)} ${r(fmtDuration(aMs), 8)} ${r(fmtDuration(pMs), 7)} ${r(fmtDuration(wMs), 7)} ${r(String(sess), 5)} ${r(fmtTokens(tok), 7)}`,
   );
+  const chart = formatTokenChart(days);
+  if (chart) lines.push("", chart);
   return lines.join("\n");
 }
 
@@ -329,6 +411,16 @@ export function formatBrief(
     lines.push(`  ${statLine}`);
   } else {
     lines.push(`Oh ▸ ${statLine}`);
+  }
+  // When today's work spanned more than one repo, show the split — the daily
+  // total above is the sum (`byRepo` may be absent in a pre-upgrade cache).
+  const dayRepos = d.byRepo ?? [];
+  if (d.exchanges > 0 && dayRepos.length >= 2) {
+    const bits = dayRepos
+      .slice(0, 3)
+      .map((b) => `${shortRepo(b.repo)} ${fmtDuration(b.promptMs + b.awayMs + b.workMs)}`);
+    if (dayRepos.length > 3) bits.push(`+${dayRepos.length - 3} more`);
+    lines.push(`  by repo: ${bits.join(" · ")}`);
   }
   if (cache.tips && cache.tips.length > 0) {
     // Feature a different grounded draft each render (rotation, advanced per

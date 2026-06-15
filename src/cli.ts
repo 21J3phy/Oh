@@ -23,7 +23,8 @@ import {
 import { SCHEMA_SQL } from "./schema.js";
 import { createDb } from "./db.js";
 import { createEmbedder } from "./embed.js";
-import { captureAll, captureFile } from "./capture.js";
+import { captureAll, captureFile, gitRepoIdentity } from "./capture.js";
+import { shortRepo } from "./normalize.js";
 import { ask, formatAskResult, parseSince } from "./ask.js";
 import { computeInsights, formatInsights, generateTips } from "./insights.js";
 import { formatDailyHistory, readInsightsCache, refreshInsightsCache } from "./brief.js";
@@ -95,10 +96,15 @@ Self-host (your own Supabase + OpenAI keys):
                           limits capture to one or more git projects).
   oh migrate              (Re)write the schema SQL to paste into Supabase.
   oh backfill [--since W] Seed the store from your existing Claude+Codex sessions.
+                          --force re-processes every session (re-stamps each
+                          row's git repo; use after changing repo identity).
   oh ask "<question>"     Query the store from the terminal (--who --repo --since W).
-  oh insights             Your last 7 days of vibecoding: time anatomy, tokens,
-                          friction, fun stats (--since W, --repo R). Always
-                          your own sessions — Insights are individual-only.
+                          Scoped to the repo you're in by default; --all-repos
+                          searches everywhere (off switch: repoScopedAsk=false).
+  oh insights             Your last 7 days of vibecoding: time anatomy (incl. a
+                          per-repo breakdown), tokens, friction, fun stats
+                          (--since W, --repo R). Always your own sessions —
+                          Insights are individual-only.
   oh pause                Incognito: stop recording sessions into the Team Brain.
   oh resume               Resume recording (the paused stretch stays a hole).
   oh status               Show config + how much is in the Team Brain.
@@ -255,14 +261,15 @@ function makeClients(cfg: Config) {
   return { db: createDb(cfg), embedder: createEmbedder(cfg) };
 }
 
-async function cmdBackfill(since: string | undefined): Promise<void> {
+async function cmdBackfill(since: string | undefined, force?: boolean): Promise<void> {
   const cfg = loadConfig();
   const { db, embedder } = makeClients(cfg);
   const sinceMs = sinceMsFrom(since);
   console.log(
-    `Backfilling as "${cfg.author}"${sinceMs ? ` since ${new Date(sinceMs).toISOString()}` : ""} …`,
+    `Backfilling as "${cfg.author}"${sinceMs ? ` since ${new Date(sinceMs).toISOString()}` : ""}` +
+      `${force ? " (--force: re-processing every session)" : ""} …`,
   );
-  const r = await captureAll(cfg, db, embedder, { sinceMs });
+  const r = await captureAll(cfg, db, embedder, { sinceMs, force });
   console.log(
     `Scanned ${r.files} files: ${r.sessions} updated, ${r.skipped} unchanged, ${r.embedded} chunks embedded, ${r.errors} errors.`,
   );
@@ -313,15 +320,27 @@ async function cmdCapture(opts: {
 
 async function cmdAsk(
   question: string,
-  opts: { who?: string; repo?: string; since?: string },
+  opts: { who?: string; repo?: string; since?: string; allRepos?: boolean },
 ): Promise<void> {
   if (!question.trim()) throw new Error('ask needs a question, e.g. oh ask "why did we choose X?"');
   const cfg = loadConfig();
   const { db, embedder } = makeClients(cfg);
+  // Default to the repo you're in (config repoScopedAsk, on by default). An
+  // explicit --repo wins; --all-repos searches everything.
+  let repo = opts.repo;
+  if (!repo && !opts.allRepos && cfg.repoScopedAsk !== false) {
+    const here = gitRepoIdentity(process.cwd());
+    if (here !== "unknown") {
+      repo = here;
+      if (process.stdout.isTTY) {
+        console.error(`(scoped to repo "${shortRepo(here)}" — use --all-repos to search everywhere)`);
+      }
+    }
+  }
   const result = await ask(cfg, db, embedder, {
     question,
     who: opts.who,
-    repo: opts.repo,
+    repo,
     since: opts.since,
   });
   console.log(formatAskResult(result));
@@ -540,6 +559,9 @@ async function cmdStatus(): Promise<void> {
   console.log(
     `projects:  ${cfg.repos && cfg.repos.length > 0 ? cfg.repos.join(", ") : "ALL (no git-project filter)"}`,
   );
+  console.log(
+    `ask scope: ${cfg.repoScopedAsk === false ? "all repos" : "current repo only (--all-repos / repoScopedAsk=false to widen)"}`,
+  );
   const tracked = existsSync(OFFSETS_DIR)
     ? readdirSync(OFFSETS_DIR).filter((f) => f.endsWith(".json")).length
     : 0;
@@ -575,6 +597,7 @@ async function main(): Promise<void> {
       file: { type: "string" },
       tool: { type: "string" },
       all: { type: "boolean" },
+      force: { type: "boolean" },
       since: { type: "string" },
       yes: { type: "boolean", short: "y" },
       help: { type: "boolean", short: "h" },
@@ -586,6 +609,7 @@ async function main(): Promise<void> {
       repos: { type: "string" },
       who: { type: "string" },
       repo: { type: "string" },
+      "all-repos": { type: "boolean" },
       email: { type: "string" },
       history: { type: "boolean" },
     },
@@ -622,13 +646,14 @@ async function main(): Promise<void> {
       cmdMigrate();
       break;
     case "backfill":
-      await cmdBackfill(values.since);
+      await cmdBackfill(values.since, Boolean(values.force));
       break;
     case "ask":
       await cmdAsk(positionals.slice(1).join(" "), {
         who: values.who,
         repo: values.repo,
         since: values.since,
+        allRepos: Boolean(values["all-repos"]),
       });
       break;
     case "insights":

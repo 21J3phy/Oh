@@ -58,6 +58,15 @@ export interface Config {
    * to both backfill and the ongoing hook). Omit/empty = capture everything.
    */
   repos?: string[];
+  /**
+   * Scope `ask` to the git repo you're currently in (matched on the repo's git
+   * remote — the same identity stored on each chunk; falls back to the folder
+   * basename for non-git dirs). When true (the default), the MCP server forces
+   * every query to the current repo so an agent can't reach into another
+   * project's memory, and `oh ask` defaults to it too (override with
+   * `--all-repos` / `--repo`). Set false to search across all repos by default.
+   */
+  repoScopedAsk?: boolean;
 }
 
 /** Token usage attributable to a single event (already deduped/diffed by the parser). */

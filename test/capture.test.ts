@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { effectiveFromIndex, repoAllowed, resolveProjectKey } from "../src/capture.js";
+import { effectiveFromIndex, gitRepoIdentity, repoAllowed, resolveProjectKey } from "../src/capture.js";
 import { isIncognito } from "../src/config.js";
 
 test("no allowlist captures everything", () => {
@@ -21,6 +21,16 @@ test("matches the current repo's git remote by substring", () => {
   assert.equal(repoAllowed(process.cwd(), [name]), true, `should match ${name} in ${key}`);
   assert.equal(repoAllowed(process.cwd(), [key]), true, "full remote matches");
   assert.equal(repoAllowed(process.cwd(), ["zzz-not-a-real-project"]), false);
+});
+
+test("gitRepoIdentity prefers the git remote, falls back to the basename", () => {
+  const key = resolveProjectKey(process.cwd());
+  if (key) {
+    assert.equal(gitRepoIdentity(process.cwd()), key, "in a git repo → the normalized remote");
+  }
+  // A path with no git remote → the folder basename.
+  assert.equal(gitRepoIdentity("/definitely/not/a/repo/myproj"), "myproj");
+  assert.equal(gitRepoIdentity(null), "unknown");
 });
 
 // --- Incognito (ADR 0011) -------------------------------------------------
