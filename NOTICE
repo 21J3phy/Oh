@@ -1,0 +1,14 @@
+Oh — the memory layer for AI-coding teams
+Copyright 2026 Oh (Vinay Surabhi)
+
+This product includes the Oh open-source core (the `oh-brain` CLI/MCP package
+in src/, the self-host schema in migrations/, and the agent skills in skills/),
+licensed under the Apache License, Version 2.0. You may obtain a copy of the
+License at http://www.apache.org/licenses/LICENSE-2.0.
+
+NOT covered by Apache-2.0 (licensed commercially — see web/LICENSE):
+  - "Oh Cloud", the hosted multi-tenant control plane in web/
+  - Enterprise features (SSO, audit logging, visibility-policy controls,
+    deploy-in-your-cloud)
+
+See docs/adr/0012-apache-core-commercial-cloud.md for the open-core rationale.

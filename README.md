@@ -1,6 +1,13 @@
 # Oh — the memory layer for AI-coding teams
 
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![npm](https://img.shields.io/npm/v/oh-brain.svg)](https://www.npmjs.com/package/oh-brain)
+[![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
+
 > **Landing page:** https://oh-landing-mu.vercel.app · source in [`site/`](./site/), deploy with `cd site && vercel deploy --prod`.
+>
+> **Contributing?** Start with [CONTRIBUTING.md](./CONTRIBUTING.md). Oh is **open core** — the CLI/MCP, schema, and skills are Apache-2.0; `web/` (Oh Cloud) is commercial ([ADR 0012](./docs/adr/0012-apache-core-commercial-cloud.md)).
 
 **Supercharge your AI with memory.** Every session across **Claude Code** and
 **Codex** is captured into a secret-scrubbed store (the **Team Brain**) that
@@ -61,7 +68,7 @@ Restart Claude Code and Codex (approve the one-time Codex hook-trust prompt), th
 
 **Self-host (also free, forever):** your memory in *your* Supabase project, embeddings on *your* OpenAI key — same CLI, same features. `oh migrate` (paste `~/.oh/schema.sql` into your project's SQL editor once) → `oh init` (enter your keys) → `oh backfill`. See [One-time project setup](#one-time-project-setup-one-person-does-this) below.
 
-Prereq: **Node ≥ 20**. Core team working on Oh itself: clone this (private) repo and use `node dist/cli.js` — collaborator access required.
+Prereq: **Node ≥ 20**. Working on Oh itself? Clone the repo, `npm install && npm run build`, then run `node dist/cli.js` (or `npm run dev -- <args>`). See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## How it works
 

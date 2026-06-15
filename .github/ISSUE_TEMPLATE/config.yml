@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/21J3phy/Oh/blob/main/SECURITY.md
+    about: Please report security issues privately, not as a public issue.
+  - name: Try Oh / become a design-partner team
+    url: https://oh-landing-mu.vercel.app
+    about: Want your team to try Oh and give feedback? Start here.
