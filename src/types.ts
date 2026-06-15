@@ -20,23 +20,28 @@ export interface Config {
   /**
    * "hosted": Oh-owned store, no keys, auth via `oh login` (ADR 0010).
    * "selfhost": your own Supabase + OpenAI keys (the original v0 shape).
+   * "local": nothing leaves the machine — a file-based store under ~/.oh/local
+   *   and an in-process embedding model. No cloud, no API, fully offline after a
+   *   one-time model fetch. The zero-trust on-ramp for security-locked orgs.
    * Absent = selfhost (backwards compatible).
    */
-  mode?: "hosted" | "selfhost";
+  mode?: "hosted" | "selfhost" | "local";
   /** Hosted-mode state. Required when mode === "hosted". */
   hosted?: HostedConfig;
   /** Display name attributed to this person's Sessions in the Team Brain. */
   author: string;
-  /** Shared Supabase project URL. */
-  supabaseUrl: string;
+  /** Shared Supabase project URL. Unused in hosted/local mode. */
+  supabaseUrl?: string;
   /**
    * Supabase key. For the v0 dogfood this is the service-role key: clients
    * read AND write the shared store directly, no backend, no RLS. The tradeoff
    * (shared creds among a few trusted people) is accepted in ADR 0006 / the plan.
+   * Unused in hosted/local mode.
    */
-  supabaseKey: string;
-  /** OpenAI API key — used for embeddings at capture time and query time. */
-  openaiKey: string;
+  supabaseKey?: string;
+  /** OpenAI API key — used for embeddings at capture time and query time.
+   *  Unused in hosted (proxy holds it) and local (in-process model) mode. */
+  openaiKey?: string;
   /** Embedding model. Must stay fixed for a store (dimension is baked into the schema). */
   embeddingModel: string;
   /** Include assistant `thinking` blocks (Claude) / `reasoning` summaries (Codex) in the embedded text. */
