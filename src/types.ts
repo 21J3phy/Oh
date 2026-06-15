@@ -64,6 +64,13 @@ export interface Config {
    */
   repos?: string[];
   /**
+   * Insights-only install (ADR 0014): capture writes ONLY Metrics — token/time
+   * counts — and never embeds or stores prompt/code text. No `ask`, no MCP
+   * server, no embedding model, no vector store. The lightest, most privacy-
+   * minimal Oh: it counts your usage and nothing else. Implies mode "local".
+   */
+  insightsOnly?: boolean;
+  /**
    * Scope `ask` to the git repo you're currently in (matched on the repo's git
    * remote — the same identity stored on each chunk; falls back to the folder
    * basename for non-git dirs). When true (the default), the MCP server forces

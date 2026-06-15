@@ -169,12 +169,14 @@ function addHookToConfig(config: any, event: string, command: string): boolean {
   return changed;
 }
 
-/** Register Claude: Stop+SessionEnd capture hooks and the `ask` MCP server. */
+/** Register Claude: Stop+SessionEnd capture hooks and the `ask` MCP server.
+ *  `insightsOnly` (ADR 0014) wires capture + statusline only — no `ask` MCP. */
 export function registerClaude(
   node: string,
   cli: string,
   apply: boolean,
   paths: RegisterPaths = defaultPaths(),
+  insightsOnly = false,
 ): RegisterResult {
   const result = emptyResult();
   const cmd = hookCommand(node, cli, "claude");
@@ -215,7 +217,11 @@ export function registerClaude(
     result.skipped.push(`${paths.claudeSettings} (statusLine already current)`);
   }
 
-  // --- MCP server (~/.claude.json) ---
+  // --- MCP server (~/.claude.json) — the `ask` front door; skipped insights-only ---
+  if (insightsOnly) {
+    result.skipped.push(`${paths.claudeJson} (mcpServers.oh — insights-only, no ask)`);
+    return result;
+  }
   const claudeJson = readJson(paths.claudeJson);
   claudeJson.mcpServers ??= {};
   const desired = { command: node, args: [cli, "mcp"] };
@@ -234,12 +240,14 @@ export function registerClaude(
   return result;
 }
 
-/** Register Codex: Stop capture hook and the `ask` MCP server. */
+/** Register Codex: Stop capture hook and the `ask` MCP server.
+ *  `insightsOnly` (ADR 0014) wires the capture hook only — no `ask` MCP. */
 export function registerCodex(
   node: string,
   cli: string,
   apply: boolean,
   paths: RegisterPaths = defaultPaths(),
+  insightsOnly = false,
 ): RegisterResult {
   const result = emptyResult();
   const cmd = hookCommand(node, cli, "codex");
@@ -264,7 +272,11 @@ export function registerCodex(
     result.skipped.push(`${paths.codexHooks} (hooks already present)`);
   }
 
-  // --- MCP server (config.toml, add or path-correct, preserving the file) ---
+  // --- MCP server (config.toml) — the `ask` front door; skipped insights-only ---
+  if (insightsOnly) {
+    result.skipped.push(`${paths.codexConfig} ([mcp_servers.oh] — insights-only, no ask)`);
+    return result;
+  }
   const configText = existsSync(paths.codexConfig)
     ? readFileSync(paths.codexConfig, "utf8")
     : "";
@@ -352,10 +364,14 @@ export function registerAll(
   cli: string,
   apply: boolean,
   paths: RegisterPaths = defaultPaths(),
+  insightsOnly = false,
 ): RegisterResult {
-  const a = registerClaude(node, cli, apply, paths);
-  const b = registerCodex(node, cli, apply, paths);
-  const c = registerCopilot(node, cli, apply, paths);
+  const a = registerClaude(node, cli, apply, paths, insightsOnly);
+  const b = registerCodex(node, cli, apply, paths, insightsOnly);
+  // Copilot is a pure MCP consumer (no hooks/skills) — insights-only has no `ask`
+  // MCP to register, so there's nothing to wire there. Its capture still works
+  // via `oh backfill` / `oh capture --all`.
+  const c = insightsOnly ? emptyResult() : registerCopilot(node, cli, apply, paths);
   return {
     changed: [...a.changed, ...b.changed, ...c.changed],
     skipped: [...a.skipped, ...b.skipped, ...c.skipped],

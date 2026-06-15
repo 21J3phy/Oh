@@ -74,6 +74,37 @@ test("registerAll merges into existing configs without clobbering them", () => {
   assert.deepEqual(cop.mcpServers.oh, { type: "local", command: NODE, args: [CLI, "mcp"], tools: ["*"] });
 });
 
+test("insights-only wires hooks + statusline but NOT the ask MCP / skill (ADR 0014)", () => {
+  const paths = setup();
+  const res = registerAll(NODE, CLI, true, paths, true);
+
+  // Capture hook + statusline still land in Claude.
+  const settings = JSON.parse(readFileSync(paths.claudeSettings, "utf8"));
+  const stopCommands = settings.hooks.Stop.flatMap((g: any) => g.hooks.map((h: any) => h.command));
+  assert.ok(stopCommands.some((c: string) => c.includes("OH_HOOK=1")), "capture hook wired");
+  assert.ok(settings.hooks.SessionStart.length >= 1, "brief hook wired");
+  assert.ok(settings.statusLine?.command?.endsWith(" statusline"), "statusline wired");
+
+  // But the `ask` MCP server is NOT registered anywhere.
+  const cj = JSON.parse(readFileSync(paths.claudeJson, "utf8"));
+  assert.equal(cj.mcpServers.oh, undefined, "no oh MCP in claude.json");
+  assert.equal(cj.mcpServers.posthog.command, "ph", "existing MCP untouched");
+  const toml = readFileSync(paths.codexConfig, "utf8");
+  assert.ok(!toml.includes("[mcp_servers.oh]"), "no oh MCP in codex config");
+  // Codex capture hook still added.
+  const ch = JSON.parse(readFileSync(paths.codexHooks, "utf8"));
+  const codexStop = ch.hooks.Stop.flatMap((g: any) => g.hooks.map((h: any) => h.command));
+  assert.ok(codexStop.some((c: string) => c.includes("--tool codex")), "codex capture hook wired");
+  // Copilot is left entirely alone (no MCP to register without ask).
+  const cop = JSON.parse(readFileSync(paths.copilotMcp, "utf8"));
+  assert.equal(cop.mcpServers.oh, undefined, "copilot not touched in insights-only");
+
+  assert.ok(
+    res.changed.every((c) => !c.includes("claude.json") && !c.includes(".toml")),
+    "no MCP files reported as changed",
+  );
+});
+
 test("re-running is idempotent — no duplicates", () => {
   const paths = setup();
   registerAll(NODE, CLI, true, paths);

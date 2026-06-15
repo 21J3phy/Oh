@@ -46,13 +46,17 @@ const SKILL_SOURCE = join(REPO_ROOT, "skills", "ask-why", "SKILL.md");
 const CLAUDE_SKILLS_DIR = join(homedir(), ".claude", "skills");
 const CODEX_SKILLS_DIR = join(homedir(), ".codex", "skills");
 
-/** Hook + MCP registration plus the ask-why skill, installed for both agents. */
-function wire(apply: boolean) {
-  const parts = [
-    registerAll(NODE_PATH, CLI_PATH, apply),
-    installSkill(SKILL_SOURCE, CLAUDE_SKILLS_DIR, apply),
-    installSkill(SKILL_SOURCE, CODEX_SKILLS_DIR, apply),
-  ];
+/** Hook + MCP registration plus the ask-why skill, installed for both agents.
+ *  Insights-only (ADR 0014): capture hook + statusline only — no `ask` MCP and
+ *  no ask-why skill (there's no `ask` to trigger). */
+function wire(apply: boolean, insightsOnly = false) {
+  const parts = insightsOnly
+    ? [registerAll(NODE_PATH, CLI_PATH, apply, undefined, true)]
+    : [
+        registerAll(NODE_PATH, CLI_PATH, apply),
+        installSkill(SKILL_SOURCE, CLAUDE_SKILLS_DIR, apply),
+        installSkill(SKILL_SOURCE, CODEX_SKILLS_DIR, apply),
+      ];
   return {
     changed: parts.flatMap((p) => p.changed),
     skipped: parts.flatMap((p) => p.skipped),
@@ -79,6 +83,13 @@ function sinceMsFrom(s: string | undefined): number | null {
 }
 
 const USAGE = `Oh — give your AI a past.
+
+Insights-only (just count token/time usage — no ask, no stored text — ADR 0014):
+  oh init --insights-only Lightest install: capture writes ONLY Metrics (tokens,
+                  [--yes]  durations) to ~/.oh/local — no embeddings, no model, no
+                          ask, no MCP, never stores your prompts or code. Wires
+                          the capture hook + statusline only.
+                          (then) oh backfill, restart agents, oh insights.
 
 Local (fully offline — no cloud, no API, nothing leaves the machine — ADR 0013):
   oh init --local [--yes] Configure ~/.oh for an on-device store (~/.oh/local) and
@@ -136,6 +147,7 @@ interface InitOpts {
   noWire?: boolean;
   repos?: string[];
   local?: boolean;
+  insightsOnly?: boolean;
 }
 
 function printInitNextSteps(): void {
@@ -147,8 +159,13 @@ function printInitNextSteps(): void {
 }
 
 /** Wire (and optionally backfill) for a keyless mode — shared by hosted/local. */
-async function wireOnly(interactive: boolean, yes: boolean, nextLine: string): Promise<void> {
-  const plan = wire(false);
+async function wireOnly(
+  interactive: boolean,
+  yes: boolean,
+  nextLine: string,
+  insightsOnly = false,
+): Promise<void> {
+  const plan = wire(false, insightsOnly);
   for (const c of plan.changed) console.log(`  + ${c}`);
   for (const s of plan.skipped) console.log(`  · ${s}`);
   let apply = yes;
@@ -159,7 +176,7 @@ async function wireOnly(interactive: boolean, yes: boolean, nextLine: string): P
     apply = a === "y" || a === "yes";
   }
   if (apply && plan.changed.length > 0) {
-    const res = wire(true);
+    const res = wire(true, insightsOnly);
     console.log("✓ wired:");
     for (const c of res.changed) console.log(`  + ${c}`);
     for (const n of res.notes) console.log(`note: ${n}`);
@@ -171,6 +188,37 @@ async function cmdInit(opts: InitOpts): Promise<void> {
   ensureDirs();
   const existing = readPartialConfig();
   const interactive = process.stdin.isTTY === true;
+
+  // Insights-only (ADR 0014): the lightest Oh — counts token/time usage and
+  // nothing else. No `ask`, no MCP, no embedding model, no stored text; capture
+  // writes only Metrics. Implies local mode. Checked first so re-running plain
+  // `oh init` on an insights-only install doesn't quietly add `ask`.
+  if (opts.insightsOnly || existing.insightsOnly) {
+    let author = opts.author ?? existing.author ?? "";
+    if (!author && interactive) {
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      author = (await rl.question("Your name (attributed to your Sessions): ")).trim() || "me";
+      rl.close();
+    }
+    saveConfig({
+      mode: "local",
+      insightsOnly: true,
+      author: author || "me",
+      ...(opts.repos && opts.repos.length > 0 ? { repos: opts.repos } : {}),
+    });
+    console.log(`✓ wrote ${CONFIG_PATH} (insights-only — counts token/time usage; no ask, no stored text)`);
+    if (opts.noWire) {
+      console.log("Skipped wiring (--no-wire).");
+    } else {
+      console.log("\nPlanned wiring (Claude & Codex: capture hook + statusline only — no `ask` MCP, no skill):");
+      await wireOnly(interactive, opts.yes === true, "", true);
+    }
+    console.log("\nNext:");
+    console.log("  1. `oh backfill` — counts your existing sessions into ~/.oh/local (Metrics only, no text).");
+    console.log("  2. Restart Claude/Codex so the capture hook + brief load.");
+    console.log("  3. `oh insights` for the report; the session-start brief shows your daily numbers.");
+    return;
+  }
 
   // Local mode (ADR 0013): nothing leaves the machine — no keys, no schema, no
   // cloud. Just a name to attribute Sessions to, then wire + backfill locally.
@@ -385,6 +433,12 @@ async function cmdAsk(
 ): Promise<void> {
   if (!question.trim()) throw new Error('ask needs a question, e.g. oh ask "why did we choose X?"');
   const cfg = loadConfig();
+  if (cfg.insightsOnly) {
+    throw new Error(
+      "this is an insights-only install — `ask` is disabled (no stored text to search). " +
+        "Run `oh init --local` for the full memory + ask, or `oh insights` for your usage.",
+    );
+  }
   const { db, embedder } = makeClients(cfg);
   // Default to the repo you're in (config repoScopedAsk, on by default). An
   // explicit --repo wins; --all-repos searches everything.
@@ -606,7 +660,10 @@ async function cmdStatus(): Promise<void> {
     /* keep raw */
   }
   console.log(`author:    ${cfg.author}`);
-  if (cfg.mode === "local") {
+  if (cfg.insightsOnly) {
+    console.log(`mode:      insights-only (counts token/time usage; no ask, no stored text)`);
+    console.log(`store:     ${LOCAL_DIR} (Metrics only)`);
+  } else if (cfg.mode === "local") {
     console.log(`mode:      local (fully offline — nothing leaves this machine)`);
     console.log(`store:     ${LOCAL_DIR}`);
   } else if (cfg.mode === "hosted") {
@@ -616,9 +673,12 @@ async function cmdStatus(): Promise<void> {
     console.log(`mode:      self-host`);
     console.log(`supabase:  ${host}`);
   }
-  console.log(`model:     ${cfg.embeddingModel}`);
+  // Embedding/recency tuning is meaningless insights-only (nothing is embedded).
+  if (!cfg.insightsOnly) {
+    console.log(`model:     ${cfg.embeddingModel}`);
+    console.log(`recency:   half-life ${cfg.recencyHalfLifeDays}d, weight ${cfg.recencyWeight}`);
+  }
   console.log(`thinking:  ${cfg.includeThinking ? "included" : "excluded"}`);
-  console.log(`recency:   half-life ${cfg.recencyHalfLifeDays}d, weight ${cfg.recencyWeight}`);
   console.log(`brief:     ${cfg.brief ?? "daily"} (session-start insights brief)`);
   console.log(
     `projects:  ${cfg.repos && cfg.repos.length > 0 ? cfg.repos.join(", ") : "ALL (no git-project filter)"}`,
@@ -639,15 +699,21 @@ async function cmdStatus(): Promise<void> {
   }
   try {
     const { db } = makeClients(cfg);
-    console.log(`team brain: ${await db.chunkCount()} chunks`);
-    try {
-      const week = new Date(Date.now() - 7 * 86_400_000).toISOString();
-      const s = await db.askStats(week);
-      console.log(
-        `asks (7d):  ${s.total} asked, ${s.answered} answered — ${s.answered} interruption${s.answered === 1 ? "" : "s"} deflected`,
-      );
-    } catch {
-      console.log("asks (7d):  unavailable (apply migrations/0003_asks.sql once)");
+    if (cfg.insightsOnly) {
+      // No chunks, no asks — just the metrics rows we count usage from.
+      const rows = await db.fetchMetrics({ author: cfg.author });
+      console.log(`metrics:   ${rows.length} exchanges counted (token/time)`);
+    } else {
+      console.log(`team brain: ${await db.chunkCount()} chunks`);
+      try {
+        const week = new Date(Date.now() - 7 * 86_400_000).toISOString();
+        const s = await db.askStats(week);
+        console.log(
+          `asks (7d):  ${s.total} asked, ${s.answered} answered — ${s.answered} interruption${s.answered === 1 ? "" : "s"} deflected`,
+        );
+      } catch {
+        console.log("asks (7d):  unavailable (apply migrations/0003_asks.sql once)");
+      }
     }
   } catch (err) {
     console.error(`team brain: unavailable — ${(err as Error).message}`);
@@ -671,6 +737,7 @@ async function main(): Promise<void> {
       "openai-key": { type: "string" },
       "no-wire": { type: "boolean" },
       local: { type: "boolean" },
+      "insights-only": { type: "boolean" },
       repos: { type: "string" },
       who: { type: "string" },
       repo: { type: "string" },
@@ -703,6 +770,7 @@ async function main(): Promise<void> {
         yes: Boolean(values.yes),
         noWire: Boolean(values["no-wire"]),
         local: Boolean(values.local),
+        insightsOnly: Boolean(values["insights-only"]),
         repos: values.repos
           ? values.repos.split(",").map((s) => s.trim()).filter(Boolean)
           : undefined,

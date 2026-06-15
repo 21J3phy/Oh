@@ -325,11 +325,15 @@ export async function captureFile(
   // may have grown). Deterministic ids mean the upsert overwrites cleanly —
   // but never reach back across an incognito boundary (ADR 0011). `force`
   // re-embeds from the start (still clamped past any private floor).
+  // Insights-only (ADR 0014): no chunks at all — capture stores only Metrics, so
+  // we never embed or persist any prompt/code text.
   const fallbackFrom = force ? 0 : Math.max(0, (prev?.processed ?? 0) - 1);
   const fromIndex = effectiveFromIndex(prev, fallbackFrom);
-  const fresh = exchanges
-    .filter((ex) => ex.index >= fromIndex)
-    .map((ex) => ({ ...ex, reasoningText: scrubText(ex.reasoningText) }));
+  const fresh = cfg.insightsOnly
+    ? []
+    : exchanges
+        .filter((ex) => ex.index >= fromIndex)
+        .map((ex) => ({ ...ex, reasoningText: scrubText(ex.reasoningText) }));
 
   // Metrics carry no text and no embedding — tail-only normally, the whole
   // session on the first METRICS_V-aware pass (backfills pre-v0.1 captures) or

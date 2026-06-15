@@ -78,6 +78,18 @@ oh backfill             # first run fetches a ~23MB model into ~/.oh/models, the
 
 Restart Claude Code and Codex, then ask away — *"what did I work on last week?"*, answered entirely on-device. Air-gapped? Pre-seed `~/.oh/models` from a connected machine and set `OH_OFFLINE=1` so it never reaches for the network at all.
 
+**Insights-only — just count your token/time usage (no `ask`, no stored text — two commands):**
+
+The lightest Oh: capture writes **only Metrics** (tokens, durations) to `~/.oh/local` and **never stores a line of your prompts or code**. No embeddings, no model download, no `ask`, no MCP server. You get `oh insights` and the session-start brief — nothing else ([ADR 0014](./docs/adr/0014-insights-only-token-counting-edition.md)).
+
+```bash
+npm install -g oh-brain
+oh init --insights-only --yes   # wires the capture hook + statusline only — no ask, no model
+oh backfill                     # counts your existing sessions (Metrics only, no text)
+```
+
+Restart Claude Code and Codex, then run `oh insights` (or watch the daily brief). Flip to the full memory + `ask` any time with `oh init --local` (or hosted/self-host) followed by `oh backfill`.
+
 **Self-host (also free, forever):** your memory in *your* Supabase project, embeddings on *your* OpenAI key — same CLI, same features. `oh migrate` (paste `~/.oh/schema.sql` into your project's SQL editor once) → `oh init` (enter your keys) → `oh backfill`. See [One-time project setup](#one-time-project-setup-one-person-does-this) below.
 
 Prereq: **Node ≥ 20**. Working on Oh itself? Clone the repo, `npm install && npm run build`, then run `node dist/cli.js` (or `npm run dev -- <args>`). See [CONTRIBUTING.md](./CONTRIBUTING.md).
@@ -241,6 +253,7 @@ control — not anonymization — is Oh's answer to the chilling effect
 |---|---|
 | `oh init` | Configure, print schema, wire Claude + Codex. |
 | `oh init --local` | Fully-offline mode — on-device store (`~/.oh/local`) + in-process embeddings, no keys/account/cloud ([ADR 0013](./docs/adr/0013-local-mode-fully-offline-enterprise-onramp.md)). |
+| `oh init --insights-only` | Lightest install — counts token/time usage only; no `ask`, no MCP, no embeddings, never stores prompt/code text ([ADR 0014](./docs/adr/0014-insights-only-token-counting-edition.md)). |
 | `oh migrate` | (Re)write `~/.oh/schema.sql` to paste into Supabase. |
 | `oh backfill [--since W]` | Seed the store from existing sessions. |
 | `oh insights [--since W] [--repo R]` | Time/token/friction report — your own sessions only. |
