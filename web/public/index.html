@@ -269,6 +269,9 @@
   .install-step { white-space: pre-wrap; word-break: break-word; }
   .install-step .ic { color: var(--phos); margin-right: 10px; }
   .install-step .t-dim { font-size: 12px; }
+  .opt-label { font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: -0.01em; color: var(--bone); margin-bottom: 4px; }
+  .opt-label b { color: var(--phos); font-weight: 700; }
+  .opt-label .pill { font-family: var(--mono); font-weight: 400; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); background: var(--phos); padding: 2px 8px; margin-left: 10px; vertical-align: 2px; }
 
   /* ---- agent prompt + self-host ---- */
   .agent-box { margin-top: 34px; border: 1px solid var(--line); background: var(--ink-2); }
@@ -475,12 +478,14 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
       <span>insights are individual-only</span>
       <span>cross-tool from day one</span>
       <span>verbatim record, not summaries</span>
+      <span>fully-offline local mode — no cloud at all</span>
     </div>
   </section>
 
   <section id="get">
     <div class="kicker reveal">Open beta · free · no keys</div>
-    <h2 class="reveal">Five commands. <em>Then it just remembers.</em></h2>
+    <h2 class="reveal">A few commands. <em>Then it just remembers.</em></h2>
+    <div class="opt-label reveal">Hosted — <b>we run it</b>, no keys, no card</div>
     <div class="install reveal">
       <div class="install-step"><span class="ic">$</span> npm install -g oh-brain</div>
       <div class="install-step"><span class="ic">$</span> oh signup <span class="t-dim"># email + password, click the confirmation link</span></div>
@@ -511,6 +516,15 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
 6. Run: oh backfill   (seeds my memory from my existing Claude/Codex sessions)
 7. Tell me to fully restart Claude Code and Codex (approve the Codex hook-trust prompt), verify with oh status, and show me the invite code from oh team to share with teammates.</pre>
     </div>
+
+    <div class="opt-label reveal" style="margin-top:46px">Or run it <b>fully offline</b><span class="pill">no cloud · no api · no keys</span></div>
+    <p class="prose reveal" style="font-size:13px; margin-top:10px">Nothing leaves your machine. The memory lives on disk under <em style="font-style:normal; color:var(--bone)">~/.oh/local</em> and embeddings run in-process — no account, no Supabase, no OpenAI key, no network egress to allow-list. The easiest version for a security-locked org to approve, and it works on an air-gapped box too.</p>
+    <div class="install reveal" style="margin-top:16px">
+      <div class="install-step"><span class="ic">$</span> npm install -g oh-brain</div>
+      <div class="install-step"><span class="ic">$</span> oh init --local --yes <span class="t-dim"># on-device store + in-process model — wires Claude &amp; Codex, no keys, no account</span></div>
+      <div class="install-step"><span class="ic">$</span> oh backfill <span class="t-dim"># first run fetches a ~23MB model, then it never touches the network again</span></div>
+    </div>
+    <p class="prose reveal" style="font-size:13px; margin-top:14px">Restart Claude Code and Codex, then ask away — <em style="font-family:var(--serif); color:var(--phos)">"what did I work on last week?"</em>, answered entirely on-device. You get Recall and Insights; the shared team brain is the one thing that needs hosted or self-host.</p>
 
     <details class="selfhost reveal">
       <summary>Prefer your own infrastructure? Self-host (also free, forever)</summary>
@@ -560,6 +574,7 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
           <li class="memory">Custom retention &amp; residency</li>
           <li>SSO, audit, visibility policy</li>
           <li>Self-host / deploy in your cloud</li>
+          <li>Fully-offline local mode — nothing leaves the machine</li>
         </ul>
         <a class="btn ghost" href="mailto:niravsurabhi@gmail.com?subject=Oh%20enterprise">Talk to us</a>
       </div>
