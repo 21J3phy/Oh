@@ -68,6 +68,13 @@ function Dashboard() {
   }, [load]);
 
   const report: InsightsReport | null = useMemo(() => (rows ? computeInsights(rows) : null), [rows]);
+  const today: InsightsReport | null = useMemo(() => {
+    if (!rows) return null;
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const dayIso = dayStart.toISOString();
+    return computeInsights(rows.filter((r) => r.ts >= dayIso));
+  }, [rows]);
   const signals: EfficiencySignal[] = useMemo(() => (report ? efficiencySignals(report) : []), [report]);
   const days: DayBucket[] = useMemo(() => (rows ? bucketByDay(rows) : []), [rows]);
   const hours = useMemo(() => (rows ? bucketByHour(rows) : []), [rows]);
@@ -102,6 +109,9 @@ function Dashboard() {
 
       {report && report.exchanges > 0 && (
         <>
+          {/* today — at-a-glance "how's today going" before the full window */}
+          {today && today.exchanges > 0 && <TodaySummary today={today} />}
+
           {/* headline numbers */}
           <div className="grid cols-4" style={{ marginTop: 24 }}>
             <Stat num={String(report.sessions)} sub="sessions" />
@@ -194,6 +204,26 @@ function Dashboard() {
         </>
       )}
     </main>
+  );
+}
+
+function TodaySummary({ today }: { today: InsightsReport }) {
+  const wall = today.promptMs + today.awayMs + today.workMs;
+  const fresh = today.inputTokens + today.outputTokens + today.cacheWriteTokens;
+  const bits = [
+    `${fmtDuration(today.promptMs)} you · ${fmtDuration(today.workMs)} agent`,
+    `${fmtTokens(fresh)} fresh tokens`,
+    `${today.sessions} session${today.sessions === 1 ? "" : "s"}`,
+  ];
+  if (today.rabbitHoleEpisodes > 0) {
+    bits.push(`${today.rabbitHoleEpisodes} rabbit hole${today.rabbitHoleEpisodes === 1 ? "" : "s"}`);
+  }
+  return (
+    <div className="card" style={{ marginTop: 24, display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+      <span style={{ fontFamily: "var(--display)", fontWeight: 800, letterSpacing: "-0.03em" }}>Today</span>
+      <span className="accent" style={{ fontFamily: "var(--display)", fontWeight: 700 }}>~{fmtDuration(wall)}</span>
+      <span className="muted" style={{ fontSize: 13 }}>{bits.join(" · ")}</span>
+    </div>
   );
 }
 
