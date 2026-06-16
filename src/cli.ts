@@ -728,31 +728,50 @@ async function cmdStatus(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const { values, positionals } = parseArgs({
-    allowPositionals: true,
-    options: {
-      file: { type: "string" },
-      tool: { type: "string" },
-      all: { type: "boolean" },
-      force: { type: "boolean" },
-      since: { type: "string" },
-      yes: { type: "boolean", short: "y" },
-      help: { type: "boolean", short: "h" },
-      author: { type: "string" },
-      "supabase-url": { type: "string" },
-      "supabase-key": { type: "string" },
-      "openai-key": { type: "string" },
-      "no-wire": { type: "boolean" },
-      local: { type: "boolean" },
-      "insights-only": { type: "boolean" },
-      repos: { type: "string" },
-      who: { type: "string" },
-      repo: { type: "string" },
-      "all-repos": { type: "boolean" },
-      email: { type: "string" },
-      history: { type: "boolean" },
-    },
-  });
+  let parsed;
+  try {
+    parsed = parseArgs({
+      allowPositionals: true,
+      options: {
+        file: { type: "string" },
+        tool: { type: "string" },
+        all: { type: "boolean" },
+        force: { type: "boolean" },
+        since: { type: "string" },
+        yes: { type: "boolean", short: "y" },
+        help: { type: "boolean", short: "h" },
+        author: { type: "string" },
+        "supabase-url": { type: "string" },
+        "supabase-key": { type: "string" },
+        "openai-key": { type: "string" },
+        "no-wire": { type: "boolean" },
+        local: { type: "boolean" },
+        "insights-only": { type: "boolean" },
+        repos: { type: "string" },
+        who: { type: "string" },
+        repo: { type: "string" },
+        "all-repos": { type: "boolean" },
+        email: { type: "string" },
+        history: { type: "boolean" },
+      },
+    });
+  } catch (err) {
+    // Most commonly this fires when someone on an older release passes a flag
+    // that didn't exist yet (e.g. `oh init --local` on a build before local
+    // mode shipped). Node's raw "Unknown option" message sends people chasing
+    // a bug that's really just a stale install — point them at the update.
+    if ((err as NodeJS.ErrnoException).code === "ERR_PARSE_ARGS_UNKNOWN_OPTION") {
+      console.error(`oh: ${(err as Error).message}`);
+      console.error(
+        "\nIf you expected this flag to work, your installed Oh is out of date.\n" +
+          "Update it:  npm i -g oh-brain@latest",
+      );
+      process.exitCode = 1;
+      return;
+    }
+    throw err;
+  }
+  const { values, positionals } = parsed;
 
   const cmd = positionals[0] ?? (values.help ? "help" : "");
   const tool = asTool(values.tool);
