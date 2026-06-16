@@ -121,10 +121,10 @@ Self-host (your own Supabase + OpenAI keys):
   oh ask "<question>"     Query the store from the terminal (--who --repo --since W).
                           Scoped to the repo you're in by default; --all-repos
                           searches everywhere (off switch: repoScopedAsk=false).
-  oh insights             Your last 7 days of vibecoding: time anatomy (incl. a
-                          per-repo breakdown), tokens, friction, fun stats
-                          (--since W, --repo R). Always your own sessions —
-                          Insights are individual-only.
+  oh insights             A today summary, then your last 7 days of vibecoding:
+                          time anatomy (incl. a per-repo breakdown), tokens,
+                          friction, fun stats (--since W, --repo R). Always your
+                          own sessions — Insights are individual-only.
   oh pause                Incognito: stop recording sessions into the Team Brain.
   oh resume               Resume recording (the paused stretch stays a hole).
   oh status               Show config + how much is in the Team Brain.
@@ -605,7 +605,14 @@ async function cmdInsights(opts: { since?: string; repo?: string; history?: bool
     repo: opts.repo ?? null,
     since: sinceIso,
   });
-  console.log(formatInsights(computeInsights(rows, { author, sinceIso })));
+  // "Today" = the local calendar day (resets at local midnight, like the brief),
+  // shown as an at-a-glance summary above the full --since window.
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const dayIso = dayStart.toISOString();
+  const todayRows = rows.filter((r) => r.ts >= dayIso);
+  const today = todayRows.length > 0 ? computeInsights(todayRows, { author, sinceIso: dayIso }) : null;
+  console.log(formatInsights(computeInsights(rows, { author, sinceIso }), today));
   try {
     const texts = await db.fetchOwnChunkTexts(author, sinceIso ?? new Date(0).toISOString());
     const tips = generateTips(rows, texts).slice(0, 3);

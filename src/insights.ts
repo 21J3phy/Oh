@@ -431,7 +431,7 @@ function pct(x: number): string {
   return `${Math.round(x * 100)}%`;
 }
 
-export function formatInsights(r: InsightsReport): string {
+export function formatInsights(r: InsightsReport, today?: InsightsReport | null): string {
   const who = r.author ? `${r.author}'s` : "Your";
   const since = r.sinceIso ? ` since ${r.sinceIso.slice(0, 10)}` : "";
   const lines: string[] = [`${who} vibecoding${since}`, ""];
@@ -439,6 +439,20 @@ export function formatInsights(r: InsightsReport): string {
   if (r.exchanges === 0) {
     lines.push("No captured exchanges in this window. (Run `oh backfill`, or widen --since.)");
     return lines.join("\n");
+  }
+
+  // Today first — the at-a-glance "how's today going" before the full window.
+  if (today && today.exchanges > 0) {
+    const tWall = today.promptMs + today.awayMs + today.workMs;
+    const tFresh = today.inputTokens + today.outputTokens + today.cacheWriteTokens;
+    lines.push(
+      `Today  ~${fmtDuration(tWall)}  (${fmtDuration(today.promptMs)} you · ${fmtDuration(today.workMs)} agent) · ` +
+        `${fmtTokens(tFresh)} fresh tokens · ${today.sessions} session${today.sessions === 1 ? "" : "s"}` +
+        (today.rabbitHoleEpisodes > 0
+          ? ` · ${today.rabbitHoleEpisodes} rabbit hole${today.rabbitHoleEpisodes === 1 ? "" : "s"}`
+          : ""),
+    );
+    lines.push("");
   }
 
   const wall = r.promptMs + r.awayMs + r.workMs;
