@@ -48,7 +48,10 @@ function getPipe(model: string): Promise<(texts: string[]) => Promise<number[][]
       tf.env.allowLocalModels = true;
       if (process.env.OH_OFFLINE === "1") tf.env.allowRemoteModels = false;
     }
-    const extractor = await tf.pipeline("feature-extraction", model);
+    // Quantized (int8) weights: ~23MB instead of ~98MB fp32, ~4× less memory,
+    // and it silences the runtime's "dtype not specified" warning. Recall quality
+    // for session-excerpt retrieval is indistinguishable from fp32 at this size.
+    const extractor = await tf.pipeline("feature-extraction", model, { dtype: "q8" });
     return async (texts: string[]) => {
       const out = await extractor(texts, { pooling: "mean", normalize: true });
       return out.tolist() as number[][];

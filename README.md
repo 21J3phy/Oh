@@ -5,9 +5,12 @@
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
 
-> **Landing page:** https://oh-landing-mu.vercel.app — source is [`web/public/index.html`](./web/public/index.html) (the [`web/`](./web/) Next.js project serves it at `/` via a rewrite, and owns `/login`, `/dashboard`, `/api/embed`). The Vercel project's Root Directory is `web/`, so deploy **from the repo root**: `vercel deploy --prod` (one-time: `vercel link --project oh-landing`).
->
-> **Contributing?** Start with [CONTRIBUTING.md](./CONTRIBUTING.md). Oh is **open core** — the CLI/MCP, schema, and skills are Apache-2.0; `web/` (Oh Cloud) is commercial ([ADR 0012](./docs/adr/0012-apache-core-commercial-cloud.md)).
+> **Try it:** [oh-landing-mu.vercel.app](https://oh-landing-mu.vercel.app) · `npm i -g oh-brain` · **open core** — the CLI/MCP, schema, and skills are Apache-2.0; only Oh Cloud (`web/`) is commercial ([ADR 0012](./docs/adr/0012-apache-core-commercial-cloud.md)). Contributing? See [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+<!-- Maintainer/deploy notes (hidden in rendered view):
+  Landing source is web/public/index.html. The web/ Next.js project serves it at / via a rewrite
+  and owns /login, /dashboard, /api/embed. The Vercel project's Root Directory is web/, so deploy
+  FROM THE REPO ROOT: `vercel deploy --prod` (one-time: `vercel link --project oh-landing`). -->
 
 **Supercharge your AI with memory.** Every session across **Claude Code** and
 **Codex** is captured into a secret-scrubbed store (the **Team Brain**) that
@@ -36,13 +39,15 @@ go-to-market wedge is the re-explaining loop.
 
 ## Get Started
 
+> **Just want to try it? No signup, fully offline:** `npm i -g oh-brain && oh init --local --yes && oh backfill` — on-device store + in-process model, nothing leaves your machine. Full details under **Local — fully offline** below.
+
 Oh is in **open beta** — installable by anyone from npm (`oh-brain`; the CLI is `oh`), free, **hosted, no keys**. The Oh **core** (this CLI/MCP package, the self-host schema, and the agent skills) is **open source under the [Apache License 2.0](./LICENSE)** — use it, modify it, build on it, self-host it for free forever. Only **Oh Cloud** (the hosted multi-tenant control plane in [`web/`](./web/LICENSE)) and enterprise features (SSO, audit, deploy-in-your-cloud) are licensed commercially. See [ADR 0012](./docs/adr/0012-apache-core-commercial-cloud.md).
 
 **Hosted (the default — five commands):**
 
 ```bash
 npm install -g oh-brain
-oh signup               # email + password, click the confirmation link
+oh signup               # email + password — logged in instantly, no email step
 oh team create "Acme"   # or: oh team join <invite-code> — solo counts as a team of one
 oh init --yes           # wires Claude Code & Codex (hooks + ask + insights)
 oh backfill             # give it your past — seeds memory from your existing sessions

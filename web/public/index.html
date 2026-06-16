@@ -69,11 +69,17 @@
   nav a.signin:hover { color: var(--bone); }
 
   /* ---- hero ---- */
-  .hero { padding: 100px 0 30px; }
+  .hero {
+    padding: 78px 0 30px;
+    display: grid; grid-template-columns: 1fr 1.06fr; gap: 50px;
+    align-items: center;
+  }
+  @media (max-width: 980px) { .hero { grid-template-columns: 1fr; gap: 40px; padding-top: 56px; } }
+  .hero-copy { min-width: 0; }
   .sigil {
     font-family: var(--display);
     font-weight: 800;
-    font-size: clamp(96px, 17vw, 200px);
+    font-size: clamp(80px, 12vw, 144px);
     line-height: 0.9;
     letter-spacing: -0.06em;
     color: var(--bone);
@@ -143,6 +149,54 @@
     box-shadow: 0 0 12px rgba(245,181,74,0.6);
   }
   @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---- hero claude-code window (authentic screenshot) ---- */
+  .hero-shot { min-width: 0; animation: rise 0.9s 0.6s cubic-bezier(.2,.7,.3,1) both; }
+  .shot-cap {
+    font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--bone-faint); margin-bottom: 11px;
+  }
+  .shot-cap b { color: var(--phos-soft); font-weight: 500; }
+  /* the Claude Code window uses Claude Code's own palette, not the Oh page palette */
+  .ccx {
+    border: 1px solid #2c2f3a; border-radius: 9px; overflow: hidden;
+    background: #1c1e26;
+    box-shadow: 0 34px 90px rgba(0,0,0,0.62);
+    font-family: var(--mono); font-size: 11px; line-height: 1.62; color: #c9c7c0;
+  }
+  .ccx-bar { display: flex; align-items: center; gap: 7px; padding: 9px 13px; background: #15171d; border-bottom: 1px solid #2a2d37; }
+  .ccx-bar i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .ccx-bar i.r { background: #e05b52; } .ccx-bar i.y { background: #e0a73a; } .ccx-bar i.g { background: #56b65b; }
+  .ccx-bar span { margin-left: 6px; font-size: 10.5px; color: #6c6f7a; }
+  .ccx-body { padding: 16px 15px 4px; }
+  .ccx-head-row { display: flex; gap: 13px; margin-bottom: 13px; }
+  .ccx-mascot { flex: none; width: 40px; height: 40px; }
+  .ccx-head { white-space: pre-line; line-height: 1.55; color: #6c6f7a; }
+  .ccx-head .t { color: #ededed; font-weight: 700; }
+  .ccx-line { white-space: pre-wrap; word-break: break-word; margin: 0 0 2px; }
+  .ccx-gap { margin-top: 9px; }
+  .ccx-dim { color: #6c6f7a; }
+  .ccx-amber { color: #d6a23e; }
+  .ccx-bar2 { color: #4a4d57; }
+  .ccx-prompt { color: #cf8a4a; }
+  .ccx-u { color: #e3e1da; }
+  .ccx-dot { color: #d77757; }
+  .ccx-brief { white-space: pre-wrap; word-break: break-word; color: #c2ad7c; line-height: 1.6; }
+  .ccx-brief .hd { color: #d6b87f; }
+  .ccx-cream { color: #d6d3cb; }
+  .ccx-cite { color: #7e9b8f; }
+  .ccx-sparkle { color: #8a6d4a; }
+  .ccx-rule { border-top: 1px solid #2f323d; margin: 11px 0; }
+  .ccx-input { padding: 1px 0 2px; }
+  .ccx-cursor { display: inline-block; width: 7px; height: 13px; background: #cf8a4a; vertical-align: -2px; margin-left: 2px; animation: blink 1.05s steps(1) infinite; }
+  .ccx-status { padding: 4px 15px 14px; font-size: 10.5px; line-height: 1.75; }
+  .ccx-status .sep { color: #3b3e49; padding: 0 5px; }
+  .ccx-status .home { color: #6c6f7a; }
+  .ccx-status .model { color: #b1a3df; }
+  .ccx-status .ctx { color: #69b3ac; }
+  .ccx-status .oh { color: #d6a23e; }
+  .ccx-status .mode { display: block; color: #cf8a4a; }
+  .ccx-status .mode em { font-style: normal; color: #6c6f7a; }
 
   /* ---- sections ---- */
   section { padding: 110px 0 0; }
@@ -357,21 +411,58 @@
   </header>
 
   <div class="hero">
-    <div class="sigil">Oh<span class="dot">.</span></div>
-    <p class="sub">Every session, your AI starts from zero. <em>Oh gives it a past.</em></p>
-    <p class="lede">Not RAG over your wiki. Not the three-bullet "memory" your tools keep. Oh holds the <strong style="color:var(--bone)">verbatim record</strong> of every session your agents have ever had — Claude Code, Codex — exact quotes, code blocks, the full reasoning thread, cited. Yours to recall. Your team's to ask. Your week to see.</p>
-    <div class="cta-row">
-      <a class="btn" href="#get">Install the beta — it's free</a>
-      <a class="btn ghost" href="#how">How it works ↓</a>
-      <a class="btn ghost" href="/login">Open the app →</a>
+    <div class="hero-copy">
+      <div class="sigil">Oh<span class="dot">.</span></div>
+      <p class="sub">Every session, your AI starts from zero. <em>Oh gives it a past.</em></p>
+      <p class="lede">Not RAG over your wiki. Not the three-bullet "memory" your tools keep. Oh holds the <strong style="color:var(--bone)">verbatim record</strong> of every session your agents have ever had — Claude Code, Codex — exact quotes, code blocks, the full reasoning thread, cited. Yours to recall. Your team's to ask. Your week to see.</p>
+      <div class="cta-row">
+        <a class="btn" href="#get">Install the beta — it's free</a>
+        <a class="btn ghost" href="#how">How it works ↓</a>
+        <a class="btn ghost" href="/login">Open the app →</a>
+      </div>
     </div>
 
-    <div class="term" id="term">
-      <div class="term-bar">
-        <div class="lights"><span></span><span></span><span></span></div>
-        <span style="margin-left:8px">claude — your machine, monday morning</span>
+    <div class="hero-shot">
+      <div class="shot-cap">Claude Code, with Oh wired in — <b>brief on open · ask · statusbar</b></div>
+      <div class="ccx">
+        <div class="ccx-bar"><i class="r"></i><i class="y"></i><i class="g"></i><span>claude — /Users/nrav</span></div>
+        <div class="ccx-body">
+          <div class="ccx-head-row">
+            <svg class="ccx-mascot" viewBox="0 0 36 36" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <g fill="#d77757">
+                <rect x="12" y="0" width="12" height="36"/>
+                <rect x="0" y="12" width="36" height="12"/>
+                <rect x="4" y="8" width="4" height="4"/>
+                <rect x="28" y="8" width="4" height="4"/>
+                <rect x="4" y="24" width="4" height="4"/>
+                <rect x="28" y="24" width="4" height="4"/>
+              </g>
+            </svg>
+            <div class="ccx-head"><span class="t">Claude Code</span> v2.1.178
+Opus 4.8 with high effort · Claude Pro
+/Users/nrav</div>
+          </div>
+          <div class="ccx-line"><span class="ccx-amber">3 setup issues: MCP</span> <span class="ccx-dim">· /doctor</span></div>
+          <div class="ccx-line ccx-gap"><span class="ccx-bar2">▎</span> <span class="ccx-dim">Using Opus 4.8 (from .claude/settings.json) · /model</span></div>
+          <div class="ccx-line ccx-gap"><span class="ccx-prompt">❯</span> <span class="ccx-u">hi</span></div>
+          <div class="ccx-brief ccx-gap"><span class="ccx-dot">●</span> <span class="hd">Oh ▸ where you left off: "Create offline local enterprise version" (github.com/21j3phy/oh · 2h ago)</span>
+    today 5h 49m (1h 10m you · 3h 47m agent) · 2.1M tokens — week: 13h 24m, 33 sessions
+    by repo: aydhi 3h 27m · oh 2h 22m
+    tip: one turn dumped 418k fresh tokens at once — that paste rode in context all session; next big one, /clear after the heavy lift.</div>
+          <div class="ccx-line ccx-gap"><span class="ccx-cream">  Hey! What can I help you with?</span></div>
+          <div class="ccx-line ccx-gap"><span class="ccx-prompt">❯</span> <span class="ccx-u">ask why we switched the queue from SQS to Redis</span></div>
+          <div class="ccx-brief ccx-gap" style="color:#c9c7c0"><span class="ccx-dot">●</span> Retries were poisoning the batch — Sam hit the vendor rate limit and moved dedup into Redis.
+<span class="ccx-cite">  [Sam · claude · 12 Jun · session 0e20a191 · sim 0.87]</span></div>
+          <div class="ccx-line ccx-gap"><span class="ccx-sparkle">✻</span> <span class="ccx-dim">Baked for 11s</span></div>
+          <div class="ccx-rule"></div>
+          <div class="ccx-input"><span class="ccx-prompt">❯</span><span class="ccx-cursor"></span></div>
+          <div class="ccx-rule"></div>
+        </div>
+        <div class="ccx-status">
+          <span class="home">~</span><span class="sep">|</span><span class="model">Opus 4.8</span><span class="sep">|</span><span class="ctx">ctx:97%</span><span class="sep">|</span><span class="oh">Oh · 5h 49m today · 2.1M tok</span>
+          <span class="mode">⏵⏵ auto mode on <em>(shift+tab to cycle) · ← for agents</em></span>
+        </div>
       </div>
-      <div class="term-body" id="termBody"></div>
     </div>
   </div>
 
@@ -488,7 +579,7 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
     <div class="opt-label reveal">Hosted — <b>we run it</b>, no keys, no card</div>
     <div class="install reveal">
       <div class="install-step"><span class="ic">$</span> npm install -g oh-brain</div>
-      <div class="install-step"><span class="ic">$</span> oh signup <span class="t-dim"># email + password, click the confirmation link</span></div>
+      <div class="install-step"><span class="ic">$</span> oh signup <span class="t-dim"># email + password — logged in instantly</span></div>
       <div class="install-step"><span class="ic">$</span> oh team create "Acme" <span class="t-dim"># or: oh team join &lt;invite-code&gt; — solo counts as a team of one</span></div>
       <div class="install-step"><span class="ic">$</span> oh init --yes <span class="t-dim"># wires Claude Code &amp; Codex (hooks + ask + insights)</span></div>
       <div class="install-step"><span class="ic">$</span> oh backfill <span class="t-dim"># give it your past — seeds memory from your existing sessions</span></div>
@@ -596,70 +687,6 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
 </div>
 
 <script>
-  // ---- hero terminal: a real ask, replayed ----
-  const SCRIPT = [
-    { t: "prompt", text: "you", rest: "  what did I decide about rate limiting last month?" },
-    { t: "dim",    text: "   searching your sessions… claude + codex", delay: 650 },
-    { t: "why",    text: "Token bucket per API key, not per IP — you'd already hit the NAT problem with the school networks.", who: "you · codex · 14 May · verbatim, not a summary", delay: 500 },
-    { t: "prompt", text: "you", rest: "  and why is checkout retry wrapped in that weird mutex?", delay: 1100 },
-    { t: "dim",    text: "   searching team memory… 3 sessions match", delay: 650 },
-    { t: "why",    text: "Double-submit on slow cards — two retries raced and charged twice. Maya serialized the retry path on purpose; the comment got lost in a rebase.", who: "Maya · claude · 3 weeks ago · session 019e75d2 · sim 0.87", delay: 500 },
-    { t: "dim",    text: "   your memory, then your team's. nobody got interrupted.", delay: 900 },
-  ];
-  const body = document.getElementById("termBody");
-  let li = 0;
-  function typeLine(el, text, cps, done) {
-    let i = 0;
-    (function tick() {
-      el.textContent = text.slice(0, ++i);
-      if (i < text.length) setTimeout(tick, cps + Math.random() * 24);
-      else done && done();
-    })();
-  }
-  function next() {
-    if (li >= SCRIPT.length) {
-      const fin = document.createElement("div");
-      fin.className = "t-line";
-      fin.innerHTML = '<span class="t-prompt">you</span>  <span class="cursor"></span>';
-      body.appendChild(fin);
-      return;
-    }
-    const s = SCRIPT[li++];
-    setTimeout(() => {
-      if (s.t === "prompt") {
-        const line = document.createElement("div");
-        line.className = "t-line";
-        line.innerHTML = '<span class="t-prompt">' + s.text + "</span>  ";
-        const span = document.createElement("span");
-        span.className = "t-cmd";
-        line.appendChild(span);
-        body.appendChild(line);
-        typeLine(span, s.rest.trim(), 34, next);
-      } else if (s.t === "why") {
-        const q = document.createElement("div");
-        q.className = "t-why";
-        body.appendChild(q);
-        typeLine(q, s.text, 14, () => {
-          const who = document.createElement("span");
-          who.className = "who";
-          who.textContent = "[" + s.who + "]";
-          q.appendChild(who);
-          next();
-        });
-      } else {
-        const line = document.createElement("div");
-        line.className = "t-line t-dim";
-        line.textContent = s.text;
-        body.appendChild(line);
-        next();
-      }
-    }, s.delay || 300);
-  }
-  // start when terminal scrolls into view (or immediately if visible)
-  new IntersectionObserver((entries, obs) => {
-    if (entries[0].isIntersecting) { obs.disconnect(); setTimeout(next, 600); }
-  }, { threshold: 0.3 }).observe(document.getElementById("term"));
-
   // ---- scroll reveals ----
   const ro = new IntersectionObserver((es) => {
     es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); ro.unobserve(e.target); } });
