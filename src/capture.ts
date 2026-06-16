@@ -34,14 +34,15 @@ export const CODEX_ROOT = join(homedir(), ".codex", "sessions");
 export const COPILOT_ROOT = join(homedir(), ".copilot", "session-state");
 
 /**
- * VS Code Copilot Chat persists sessions under each workspace's storage in a
- * `chatSessions/` dir (ADR 0011 Decision 3 — the real org footprint). We sweep
- * the platform's VS Code (+ Insiders) workspaceStorage roots and keep only files
- * on a `chatSessions/` path. NOTE: the VS Code chat file schema is request/
- * response-shaped and not yet verified against a real file on this machine — the
- * parser is shape-tolerant and degrades to nothing until one is confirmed.
+ * VS Code Copilot Chat persists sessions as a journaled `.jsonl` (VERIFIED
+ * against copilot-chat 0.52.0; parsed in parse/copilot.ts) — under
+ * workspaceStorage/<id>/chatSessions/ when a folder is open, or
+ * globalStorage/emptyWindowChatSessions/ for a window with no folder (ADR 0011
+ * Decision 3 — the real org footprint). We sweep the platform's VS Code
+ * (+ Insiders / VSCodium) roots for both. `vscodeUserDirs` returns the shared
+ * `…/User` parent the two stores hang off.
  */
-export function copilotVscodeRoots(): string[] {
+function vscodeUserDirs(): string[] {
   const h = homedir();
   const variants = ["Code", "Code - Insiders", "VSCodium"];
   const bases =
@@ -50,7 +51,17 @@ export function copilotVscodeRoots(): string[] {
       : process.platform === "win32"
         ? [process.env.APPDATA ?? join(h, "AppData", "Roaming")]
         : [process.env.XDG_CONFIG_HOME ?? join(h, ".config")];
-  return bases.flatMap((b) => variants.map((v) => join(b, v, "User", "workspaceStorage")));
+  return bases.flatMap((b) => variants.map((v) => join(b, v, "User")));
+}
+
+export function copilotVscodeRoots(): string[] {
+  return vscodeUserDirs().map((u) => join(u, "workspaceStorage"));
+}
+
+// Sessions opened without a workspace folder live here instead of under any
+// workspaceStorage/<id>/chatSessions/ — same journaled format, different home.
+export function copilotVscodeEmptyWindowRoots(): string[] {
+  return vscodeUserDirs().map((u) => join(u, "globalStorage", "emptyWindowChatSessions"));
 }
 
 const PARSERS: Record<Tool, (content: string) => ParseResult> = {
@@ -347,6 +358,12 @@ export async function captureFile(
   // 0002. On failure, keep capturing chunks and leave metricsV unset so the
   // next sweep retries once the table exists.
   let metricsOk = true;
+  // The session/chunk writes hit the network (hosted/self-host). A transient
+  // outage or an expired hosted token (`oh login`) must not abort the whole
+  // capture: we keep the local crumbs and the statusline refresh alive, and —
+  // by leaving the offset un-advanced below — let the next sweep re-try these
+  // exact exchanges once the connection is back. Local mode never throws here.
+  let remoteOk = true;
   if (fresh.length > 0 || metricsTargets.length > 0) {
     const firstExchange = exchanges[0]!;
     const lastExchange = exchanges[exchanges.length - 1]!;
@@ -360,41 +377,59 @@ export async function captureFile(
       startedAt: firstExchange.ts,
       lastSeenAt: lastExchange.ts,
     };
-    await db.upsertSession(meta);
-    if (fresh.length > 0) {
-      const embeddings = await embedder.embed(fresh.map((e) => e.reasoningText));
-      await db.upsertChunks(fresh, embeddings);
-    }
     try {
-      await db.upsertMetrics(metricsTargets);
+      await db.upsertSession(meta);
+      if (fresh.length > 0) {
+        const embeddings = await embedder.embed(fresh.map((e) => e.reasoningText));
+        await db.upsertChunks(fresh, embeddings);
+      }
     } catch (err) {
-      metricsOk = false;
+      remoteOk = false;
       log(
         "capture",
-        `metrics skipped (apply migrations/0002_exchange_metrics.sql?) — ${(err as Error).message}`,
+        `session/chunks not persisted (offline, or expired token — run \`oh login\`?) — ${(err as Error).message}`,
         true,
       );
+    }
+    // Metrics share the same connection, so don't bother (or claim success)
+    // when the session write itself failed — the next sweep retries the lot.
+    if (remoteOk) {
+      try {
+        await db.upsertMetrics(metricsTargets);
+      } catch (err) {
+        metricsOk = false;
+        log(
+          "capture",
+          `metrics skipped (apply migrations/0002_exchange_metrics.sql?) — ${(err as Error).message}`,
+          true,
+        );
+      }
     }
   }
 
   maybeWriteNudge(sessionId, exchanges);
   recordLastSession(parsed, exchanges);
 
-  saveState(sessionId, {
-    bytes: size,
-    mtimeMs,
-    processed: exchanges.length,
-    updatedAt: new Date().toISOString(),
-    ...(metricsOk ? { metricsV: METRICS_V } : {}),
-    ...(prev?.privateThrough != null ? { privateThrough: prev.privateThrough } : {}),
-  });
+  // Only advance the processed-offset once the remote writes actually landed;
+  // otherwise leave prior state untouched so the next sweep re-processes this
+  // tail (metricsV stays unset on a metrics-only failure for the same reason).
+  if (remoteOk) {
+    saveState(sessionId, {
+      bytes: size,
+      mtimeMs,
+      processed: exchanges.length,
+      updatedAt: new Date().toISOString(),
+      ...(metricsOk ? { metricsV: METRICS_V } : {}),
+      ...(prev?.privateThrough != null ? { privateThrough: prev.privateThrough } : {}),
+    });
+  }
 
   return {
     sessionId,
     tool,
     exchanges: exchanges.length,
-    embedded: fresh.length,
-    skipped: false,
+    embedded: remoteOk ? fresh.length : 0,
+    skipped: !remoteOk,
   };
 }
 
@@ -459,6 +494,11 @@ export async function captureAll(
     // Copilot in VS Code (+ Insiders): chatSessions under each workspace store.
     for (const root of copilotVscodeRoots()) {
       for (const p of listJsonl(root, sinceMs, [".json", ".jsonl"], "/chatSessions/"))
+        targets.push({ tool: "copilot", path: p });
+    }
+    // …and window-less ("empty window") chats in globalStorage.
+    for (const root of copilotVscodeEmptyWindowRoots()) {
+      for (const p of listJsonl(root, sinceMs, [".json", ".jsonl"]))
         targets.push({ tool: "copilot", path: p });
     }
   }

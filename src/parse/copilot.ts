@@ -19,10 +19,11 @@
 // replied). They're handled shape-tolerantly off the same `<ns>.<sub>` dotted
 // convention; tighten when a real assistant/tool event is confirmed.
 //
-// We ALSO keep the older shape-tolerant paths (flat role/kind chat JSONL, and a
-// single session object with a messages array) — they cover VS Code Copilot
-// chatSessions and any future format drift. Degrade-to-nothing is the rule: an
-// unrecognised file yields zero events, it never throws.
+// VS Code Copilot Chat uses a different, VERIFIED shape — a journaled `.jsonl`
+// (kind/k/v delta-log) handled by its own branch below (parseVscodeJournal).
+// We ALSO keep older shape-tolerant paths (flat role/kind chat JSONL, and a
+// single session object with a messages array) for format drift. Degrade-to-
+// nothing is the rule: an unrecognised file yields zero events, it never throws.
 
 import type { ParsedEvent, ParseResult } from "../types.js";
 import { firstLine, stripWrapperBlocks } from "./util.js";
@@ -325,6 +326,124 @@ function messagesFrom(root: any): any[] | null {
   return null;
 }
 
+// ── VS Code Copilot Chat: the journaled-delta format ───────────────────────
+// VERIFIED against a real file (copilot-chat 0.52.0). A session is a `.jsonl`
+// where each line mutates a reconstructed session object:
+//   {"kind":0,"v":{…full session, requests:[]…}}   ← base snapshot
+//   {"kind":1,"k":["responderUsername"],"v":"…"}    ← set value at key path
+//   {"kind":2,"k":["requests"],"v":[…]}             ← set the requests array
+// Replaying the journal yields the session; the conversation is `requests[]`,
+// each `{ message:{text}, response:[parts], result:{metadata:{…tokens}} }`.
+// Lives under workspaceStorage/<id>/chatSessions/ (repo open) or
+// globalStorage/emptyWindowChatSessions/ (no folder).
+
+/** A journal line: numeric `kind` plus a `v` payload (optional `k` key path). */
+function isJournalLine(o: any): boolean {
+  return !!o && typeof o.kind === "number" && "v" in o;
+}
+
+/** Set `value` at the (possibly nested, possibly array-indexed) key path. */
+function setPath(root: any, path: Array<string | number>, value: unknown): void {
+  if (!path.length || !root || typeof root !== "object") return;
+  let o: any = root;
+  for (let i = 0; i < path.length - 1; i++) {
+    const key = path[i]!;
+    if (o[key] == null || typeof o[key] !== "object") o[key] = typeof path[i + 1] === "number" ? [] : {};
+    o = o[key];
+  }
+  o[path[path.length - 1]!] = value;
+}
+
+/** A VS Code response part / message part carries text as a string or a
+ *  MarkdownString ({value}); pull whichever is present. */
+function partText(p: any): string {
+  const v = p?.value ?? p?.content ?? p?.text;
+  if (typeof v === "string") return v;
+  if (v && typeof v === "object" && typeof v.value === "string") return v.value;
+  return "";
+}
+
+function summarizeVscodeTool(p: any): string {
+  const raw = p?.toolId ?? p?.toolName ?? p?.name;
+  const name = typeof raw === "string" && raw ? raw : "tool";
+  const msg =
+    partText({ value: p?.invocationMessage }) ||
+    (p?.toolSpecificData && (p.toolSpecificData.command ?? p.toolSpecificData.commandLine));
+  return typeof msg === "string" && msg.trim() ? `${name}: ${firstLine(msg)}` : name;
+}
+
+/** One `response[]` part → a parsed event (reasoning / tool / assistant text).
+ *  Noise parts (mcpServersStarting, codeblockUri, progress…) yield nothing. */
+function emitVscodePart(p: any, ts: string, events: ParsedEvent[], ctx: { model?: string }): void {
+  if (!p || typeof p !== "object") return;
+  const k = typeof p.kind === "string" ? p.kind.toLowerCase() : "";
+  if (k.includes("think") || k.includes("reason")) {
+    const t = partText(p).trim();
+    if (t) events.push({ kind: "reasoning", ts, text: t });
+    return;
+  }
+  if (k.includes("toolinvocation") || k.includes("prepareto") || (k.includes("tool") && k.includes("invoc"))) {
+    const name = p.toolId ?? p.toolName ?? p.name;
+    events.push({ kind: "tool_call", ts, toolName: typeof name === "string" ? name : undefined, toolSummary: summarizeVscodeTool(p) });
+    if (p.isError === true || outputIsError(p)) events.push({ kind: "tool_result", ts, isError: true });
+    return;
+  }
+  // Markdown / text content — the assistant's visible reply. The verified shape
+  // has no `kind` (a bare MarkdownString under `value`); tolerate named variants.
+  if (k === "" || k.includes("markdown") || k.includes("text") || k.includes("content")) {
+    const t = partText(p).trim();
+    if (t) events.push({ kind: "assistant", ts, text: t, model: ctx.model });
+  }
+}
+
+/** One reconstructed `requests[]` entry → user + response + usage events. */
+function emitVscodeRequest(r: any, events: ParsedEvent[], ctx: { model?: string }): void {
+  if (!r || typeof r !== "object") return;
+  const ts = tsOf(r);
+  const userText = cleanUserText(contentText(r.message?.text ?? r.message?.parts ?? r.message));
+  if (userText) events.push({ kind: "user", ts, text: userText, ...(INTERRUPT_RE.test(userText) ? { interrupted: true } : {}) });
+
+  const md = r.result?.metadata;
+  const model = (typeof r.modelId === "string" && r.modelId) || (typeof md?.resolvedModel === "string" ? md.resolvedModel : undefined);
+  if (model) ctx.model = model;
+
+  const resp = Array.isArray(r.response) ? r.response : [];
+  for (const p of resp) emitVscodePart(p, ts, events, ctx);
+
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const input = n(md?.promptTokens);
+  const output = n(md?.outputTokens ?? r.completionTokens);
+  if (input + output > 0) {
+    events.push({ kind: "meta", ts, model: ctx.model, usage: { input, output, cacheRead: 0, cacheWrite: 0 } });
+  }
+}
+
+/** Replay a VS Code journal (`kind`/`k`/`v` lines) into events. */
+function parseVscodeJournal(lines: string[], ids: Ids): ParsedEvent[] {
+  const events: ParsedEvent[] = [];
+  const ctx: { model?: string } = {};
+  let root: any = {};
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let o: any;
+    try {
+      o = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isJournalLine(o)) continue;
+    if (o.kind === 0) {
+      if (o.v && typeof o.v === "object") root = o.v;
+    } else if (Array.isArray(o.k)) {
+      setPath(root, o.k, o.v);
+    }
+  }
+  probeIds(root, ids, true);
+  const reqs = Array.isArray(root.requests) ? root.requests : [];
+  for (const r of reqs) emitVscodeRequest(r, events, ctx);
+  return events;
+}
+
 export function parseCopilot(content: string): ParseResult {
   const events: ParsedEvent[] = [];
   const ctx: { model?: string } = {};
@@ -332,6 +451,26 @@ export function parseCopilot(content: string): ParseResult {
 
   const trimmed = content.trim();
   if (!trimmed) return { tool: "copilot", ...ids, events };
+
+  // VS Code Copilot Chat journal: detect the {kind,v} delta-log up front (its
+  // lines aren't valid as flat chat records, so it must route here first).
+  const lines = trimmed.split("\n");
+  for (const l of lines) {
+    const s = l.trim();
+    if (!s) continue;
+    let first: any = null;
+    try {
+      first = JSON.parse(s);
+    } catch {
+      /* not the journal — fall through to the other shapes */
+    }
+    if (isJournalLine(first)) {
+      // Parse first: it fills `ids` (sessionId), which must be spread AFTER.
+      const journalEvents = parseVscodeJournal(lines, ids);
+      return { tool: "copilot", ...ids, events: journalEvents };
+    }
+    break; // first non-empty line decides
+  }
 
   // Shape A: a single JSON object (a whole session in one file — VS Code-style).
   if (trimmed.startsWith("{")) {
