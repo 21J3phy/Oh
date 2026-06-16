@@ -16,3 +16,7 @@ dist/
 # Local Oh state (never commit captured sessions or secrets)
 .oh/
 .vercel
+
+# Stray screenshots / scratch files (keep the public repo clean)
+Screenshot*
+*.tmp
