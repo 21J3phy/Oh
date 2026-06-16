@@ -21,10 +21,12 @@ Examples of unacceptable behavior:
 
 ## Enforcement
 
-Instances of unacceptable behavior may be reported to **[redacted]**.
-All reports will be reviewed and handled confidentially. Maintainers may remove,
-edit, or reject contributions and comments, or ban contributors, for behavior
-they deem inappropriate.
+Instances of unacceptable behavior may be reported privately to the maintainers
+through GitHub's [private vulnerability reporting](https://github.com/21J3phy/Oh/security/advisories/new)
+(the repository's **Security** tab → *Report a vulnerability*). All reports will
+be reviewed and handled confidentially. Maintainers may remove, edit, or reject
+contributions and comments, or ban contributors, for behavior they deem
+inappropriate.
 
 ## Attribution
 

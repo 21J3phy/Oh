@@ -8,7 +8,8 @@ core feature, not an add-on.
 
 **Please do not open a public issue for security problems.**
 
-Email **[redacted]** with:
+Report it privately through GitHub's [private vulnerability reporting](https://github.com/21J3phy/Oh/security/advisories/new)
+(the repository's **Security** tab → *Report a vulnerability*), including:
 
 - a description of the issue and its impact,
 - steps to reproduce (a proof-of-concept if you have one),
