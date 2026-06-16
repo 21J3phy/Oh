@@ -110,7 +110,7 @@ function Dashboard() {
       {report && report.exchanges > 0 && (
         <>
           {/* today — at-a-glance "how's today going" before the full window */}
-          {today && today.exchanges > 0 && <TodaySummary today={today} />}
+          {today && today.exchanges > 0 && <TodaySummary today={today} days={days} />}
 
           {/* headline numbers */}
           <div className="grid cols-4" style={{ marginTop: 24 }}>
@@ -207,22 +207,77 @@ function Dashboard() {
   );
 }
 
-function TodaySummary({ today }: { today: InsightsReport }) {
+function todayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function TodaySummary({ today, days }: { today: InsightsReport; days: DayBucket[] }) {
   const wall = today.promptMs + today.awayMs + today.workMs;
   const fresh = today.inputTokens + today.outputTokens + today.cacheWriteTokens;
-  const bits = [
-    `${fmtDuration(today.promptMs)} you · ${fmtDuration(today.workMs)} agent`,
-    `${fmtTokens(fresh)} fresh tokens`,
-    `${today.sessions} session${today.sessions === 1 ? "" : "s"}`,
+
+  // Baseline = average over prior active days in this window (today excluded).
+  const prior = days.filter((d) => d.day !== todayKey());
+  const n = prior.length;
+  const avg = n
+    ? {
+        wall: prior.reduce((s, d) => s + d.promptMs + d.awayMs + d.workMs, 0) / n,
+        fresh: prior.reduce((s, d) => s + d.freshTokens, 0) / n,
+        sessions: prior.reduce((s, d) => s + d.sessions, 0) / n,
+        exchanges: prior.reduce((s, d) => s + d.exchanges, 0) / n,
+      }
+    : null;
+
+  const num = (x: number) => x.toLocaleString();
+  const fix1 = (x: number) => x.toFixed(1);
+  const stats: { label: string; val: number; avg: number | undefined; fmt: (n: number) => string; fmtAvg: (n: number) => string; accent?: boolean }[] = [
+    { label: "time at the wheel", val: wall, avg: avg?.wall, fmt: fmtDuration, fmtAvg: fmtDuration },
+    { label: "fresh tokens", val: fresh, avg: avg?.fresh, fmt: fmtTokens, fmtAvg: fmtTokens, accent: true },
+    { label: "sessions", val: today.sessions, avg: avg?.sessions, fmt: num, fmtAvg: fix1 },
+    { label: "exchanges", val: today.exchanges, avg: avg?.exchanges, fmt: num, fmtAvg: fix1 },
   ];
-  if (today.rabbitHoleEpisodes > 0) {
-    bits.push(`${today.rabbitHoleEpisodes} rabbit hole${today.rabbitHoleEpisodes === 1 ? "" : "s"}`);
+
+  return (
+    <>
+      <div className="section-title" style={{ marginTop: 24 }}>Today</div>
+      <div className="grid cols-4">
+        {stats.map((s) => (
+          <TodayStat key={s.label} {...s} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function TodayStat({
+  label,
+  val,
+  avg,
+  fmt,
+  fmtAvg,
+  accent,
+}: {
+  label: string;
+  val: number;
+  avg: number | undefined;
+  fmt: (n: number) => string;
+  fmtAvg: (n: number) => string;
+  accent?: boolean;
+}) {
+  let cmp: { text: string; up: boolean } | null = null;
+  if (avg != null && avg > 0) {
+    const pct = Math.round(((val - avg) / avg) * 100);
+    cmp = { text: `${pct >= 0 ? "+" : ""}${pct}% vs ${fmtAvg(avg)}/day`, up: pct >= 0 };
   }
   return (
-    <div className="card" style={{ marginTop: 24, display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-      <span style={{ fontFamily: "var(--display)", fontWeight: 800, letterSpacing: "-0.03em" }}>Today</span>
-      <span className="accent" style={{ fontFamily: "var(--display)", fontWeight: 700 }}>~{fmtDuration(wall)}</span>
-      <span className="muted" style={{ fontSize: 13 }}>{bits.join(" · ")}</span>
+    <div className="card stat">
+      <div className={`num ${accent ? "accent" : ""}`}>{fmt(val)}</div>
+      <div className="sub">{label}</div>
+      {cmp && (
+        <div className="faint" style={{ fontSize: 11.5, marginTop: 8 }} title="compared with your average active day in this window">
+          {cmp.text}
+        </div>
+      )}
     </div>
   );
 }
