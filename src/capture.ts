@@ -10,7 +10,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
 import { ensureDirs, isIncognito, LAST_SESSION_PATH, NUDGES_DIR, OFFSETS_DIR } from "./config.js";
@@ -62,6 +62,27 @@ export function copilotVscodeRoots(): string[] {
 // workspaceStorage/<id>/chatSessions/ — same journaled format, different home.
 export function copilotVscodeEmptyWindowRoots(): string[] {
   return vscodeUserDirs().map((u) => join(u, "globalStorage", "emptyWindowChatSessions"));
+}
+
+/**
+ * The VS Code chat journal carries no working directory, but the workspace it
+ * belongs to is recorded in `workspaceStorage/<hash>/workspace.json`
+ * ({"folder":"file:///path"}) — two dirs up from a
+ * `<hash>/chatSessions/<id>.jsonl` file. Recover it so the session lands in the
+ * right repo (and survives a `repos` allowlist) instead of being dropped as
+ * cwd-less. Returns null for empty-window chats (no folder) or on any miss.
+ */
+export function vscodeWorkspaceCwd(sessionFilePath: string): string | null {
+  const wsDir = dirname(dirname(sessionFilePath)); // …/workspaceStorage/<hash>
+  try {
+    const raw = readFileSync(join(wsDir, "workspace.json"), "utf8");
+    const folder = JSON.parse(raw)?.folder;
+    if (typeof folder !== "string") return null;
+    if (folder.startsWith("file://")) return decodeURIComponent(new URL(folder).pathname);
+    return folder;
+  } catch {
+    return null;
+  }
 }
 
 const PARSERS: Record<Tool, (content: string) => ParseResult> = {
@@ -258,7 +279,7 @@ export async function captureFile(
   cfg: Config,
   db: Db,
   embedder: Embedder,
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean; cwdHint?: string | null } = {},
 ): Promise<CaptureResult> {
   const force = opts.force === true;
   let size: number;
@@ -273,6 +294,10 @@ export async function captureFile(
 
   const content = readFileSync(path, "utf8");
   const parsed = (PARSERS[tool] ?? parseClaude)(content);
+  // Some sources (VS Code Copilot Chat) record no cwd in the file; the caller
+  // can recover one from sidecar metadata (workspace.json). Use it so repo
+  // scoping/attribution work instead of dropping the session as cwd-less.
+  if (!parsed.cwd && opts.cwdHint) parsed.cwd = opts.cwdHint;
   const sessionId = sessionIdFromPath(path, parsed);
 
   // Respect the git-project allowlist — skip sessions from other projects.
@@ -480,7 +505,7 @@ export async function captureAll(
   opts: { tool?: Tool; sinceMs?: number | null; force?: boolean } = {},
 ): Promise<SweepResult> {
   const sinceMs = opts.sinceMs ?? null;
-  const targets: Array<{ tool: Tool; path: string }> = [];
+  const targets: Array<{ tool: Tool; path: string; cwdHint?: string | null }> = [];
   if (!opts.tool || opts.tool === "claude") {
     for (const p of listJsonl(CLAUDE_ROOT, sinceMs)) targets.push({ tool: "claude", path: p });
   }
@@ -492,9 +517,10 @@ export async function captureAll(
     for (const p of listJsonl(COPILOT_ROOT, sinceMs, [".jsonl", ".json"]))
       targets.push({ tool: "copilot", path: p });
     // Copilot in VS Code (+ Insiders): chatSessions under each workspace store.
+    // The journal has no cwd, so recover the workspace folder from workspace.json.
     for (const root of copilotVscodeRoots()) {
       for (const p of listJsonl(root, sinceMs, [".json", ".jsonl"], "/chatSessions/"))
-        targets.push({ tool: "copilot", path: p });
+        targets.push({ tool: "copilot", path: p, cwdHint: vscodeWorkspaceCwd(p) });
     }
     // …and window-less ("empty window") chats in globalStorage.
     for (const root of copilotVscodeEmptyWindowRoots()) {
@@ -504,9 +530,9 @@ export async function captureAll(
   }
 
   const result: SweepResult = { files: targets.length, sessions: 0, embedded: 0, skipped: 0, errors: 0 };
-  for (const { tool, path } of targets) {
+  for (const { tool, path, cwdHint } of targets) {
     try {
-      const r = await captureFile(path, tool, cfg, db, embedder, { force: opts.force });
+      const r = await captureFile(path, tool, cfg, db, embedder, { force: opts.force, cwdHint });
       if (r.skipped) result.skipped++;
       else result.sessions++;
       result.embedded += r.embedded;
