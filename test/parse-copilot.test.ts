@@ -154,6 +154,76 @@ test("copilot: errors and tokens land in metrics", () => {
   assert.equal(obj.reduce((a, ex) => a + ex.metrics.errors, 0), 1, "tool error counted");
 });
 
+// VERIFIED VS Code Copilot Chat (copilot-chat 0.52.0): a journaled `.jsonl`
+// where each line mutates a reconstructed session — {kind:0,v:snapshot},
+// {kind:1,k,v} set-path, {kind:2,k:["requests"],v:[…]}. User text is
+// message.text; the assistant reply is a bare MarkdownString under a response
+// part's `value`; thinking parts are reasoning; tokens ride on result.metadata.
+const VSCODE_JOURNAL = [
+  { kind: 0, v: { version: 3, sessionId: "vsc-1", responderUsername: "", requests: [] } },
+  { kind: 1, k: ["responderUsername"], v: "GitHub Copilot" },
+  {
+    kind: 2,
+    k: ["requests"],
+    v: [
+      {
+        requestId: "req-1",
+        timestamp: 1781575369480,
+        modelId: "copilot/auto",
+        message: { text: "Why did we pick Redis?", parts: [{ kind: "text", text: "Why did we pick Redis?" }] },
+        response: [
+          { kind: "thinking", value: "Checking the codebase for the Redis decision.", id: "t1" },
+          { kind: "toolInvocationSerialized", toolId: "copilot_searchCodebase", invocationMessage: { value: "Searching the codebase" } },
+          { value: { value: "We picked Redis for latency.", supportThemeIcons: false, supportHtml: false } },
+        ],
+        result: { metadata: { promptTokens: 12, outputTokens: 20, resolvedModel: "gpt-5" } },
+        completionTokens: 20,
+      },
+      {
+        requestId: "req-2",
+        timestamp: 1781575400000,
+        message: { text: "thanks" },
+        response: [{ value: { value: "np" } }],
+        result: { metadata: { promptTokens: 2, outputTokens: 1 } },
+      },
+    ],
+  },
+]
+  .map((e) => JSON.stringify(e))
+  .join("\n");
+
+test("copilot: parses the VS Code journaled chat format", () => {
+  const r = parseCopilot(VSCODE_JOURNAL);
+  assert.equal(r.tool, "copilot");
+  assert.equal(r.sessionId, "vsc-1", "session id reconstructed from the journal");
+
+  const kinds = r.events.map((e) => e.kind);
+  assert.ok(kinds.includes("user"), "user prompt");
+  assert.ok(kinds.includes("reasoning"), "thinking part → reasoning");
+  assert.ok(kinds.includes("tool_call"), "toolInvocation → tool_call");
+  assert.ok(kinds.includes("assistant"), "markdown value → assistant text");
+
+  const user = r.events.find((e) => e.kind === "user")!;
+  assert.equal(user.text, "Why did we pick Redis?");
+  const asst = r.events.find((e) => e.kind === "assistant")!;
+  assert.equal(asst.text, "We picked Redis for latency.", "text pulled from nested MarkdownString");
+  const call = r.events.find((e) => e.kind === "tool_call")!;
+  assert.equal(call.toolSummary, "copilot_searchCodebase: Searching the codebase");
+  const meta = r.events.find((e) => e.kind === "meta")!;
+  assert.equal(meta.usage?.input, 12);
+  assert.equal(meta.usage?.output, 20);
+});
+
+test("copilot: VS Code journal yields embeddable exchanges with tokens", () => {
+  const exchanges = toExchanges(parseCopilot(VSCODE_JOURNAL), { author: "tester" });
+  assert.equal(exchanges.length, 2, "one exchange per request");
+  assert.ok(exchanges.every((ex) => ex.tool === "copilot"));
+  assert.ok(exchanges[0]!.reasoningText.includes("Why did we pick Redis?"), "prompt folded in");
+  assert.ok(exchanges[0]!.reasoningText.includes("We picked Redis for latency."), "reply folded in");
+  const tokens = exchanges.reduce((a, ex) => a + ex.metrics.inputTokens + ex.metrics.outputTokens, 0);
+  assert.equal(tokens, 35, "tokens summed across both requests");
+});
+
 test("copilot: garbage and empty input degrade to nothing, never throw", () => {
   assert.equal(parseCopilot("").events.length, 0);
   assert.equal(parseCopilot("not json\n{bad").events.length, 0);
