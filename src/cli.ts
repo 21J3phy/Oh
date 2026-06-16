@@ -412,14 +412,21 @@ async function cmdCapture(opts: {
   }
   if (opts.file) {
     const tool = opts.tool ?? inferTool(opts.file);
-    const r = await captureFile(opts.file, tool, cfg, db, embedder);
-    log("capture", `file ${opts.file}: +${r.embedded} chunks (skipped=${r.skipped})`);
+    let r: Awaited<ReturnType<typeof captureFile>> | null = null;
     try {
-      await refreshInsightsCache(cfg, db); // keep the session-start brief warm
-    } catch (err) {
-      log("capture", `insights cache refresh skipped — ${(err as Error).message}`);
+      r = await captureFile(opts.file, tool, cfg, db, embedder);
+      log("capture", `file ${opts.file}: +${r.embedded} chunks (skipped=${r.skipped})`);
+    } finally {
+      // The statusline/brief cache is a local-only recompute — keep it warm even
+      // when capture itself failed (parser error, network blip), so the numbers
+      // never silently freeze. Best-effort: its own failure must not surface.
+      try {
+        await refreshInsightsCache(cfg, db);
+      } catch (err) {
+        log("capture", `insights cache refresh skipped — ${(err as Error).message}`);
+      }
     }
-    if (process.stdout.isTTY) {
+    if (process.stdout.isTTY && r) {
       console.log(`${tool} ${r.sessionId ?? "?"}: +${r.embedded} chunks (skipped=${r.skipped}).`);
     }
     return;
@@ -626,11 +633,19 @@ async function cmdInsights(opts: { since?: string; repo?: string; history?: bool
 }
 
 /**
+ * How long the statusline cache may sit un-refreshed before we mark it stale.
+ * Capture refreshes it every turn, so during active work this is only crossed
+ * when capture is failing; long enough that ordinary idle gaps don't trip it.
+ */
+const STATUSLINE_STALE_MS = 90 * 60_000;
+
+/**
  * Claude Code statusline: a compact, always-visible line at the bottom of the
  * UI — the surface that needs no message to appear. Pure cache read.
  */
 function cmdStatusline(): void {
-  const cache = readInsightsCache(Date.now());
+  const now = Date.now();
+  const cache = readInsightsCache(now);
   if (!cache) return; // print nothing — Claude Code shows nothing
   const d = cache.day;
   const parts: string[] = [];
@@ -641,6 +656,17 @@ function cmdStatusline(): void {
     const dur = mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h${mins % 60 ? ` ${mins % 60}m` : ""}`;
     parts.push(`${dur} today`, `${fresh >= 1_000_000 ? (fresh / 1_000_000).toFixed(1) + "M" : Math.round(fresh / 1000) + "k"} tok`);
     if (d.rabbitHoleEpisodes > 0) parts.push(`${d.rabbitHoleEpisodes} 🕳`);
+  }
+  // The post-turn capture refreshes this cache every turn; if it hasn't advanced
+  // in a while the numbers are frozen (commonly: capture is erroring — an expired
+  // hosted token needs `oh login`). Flag it rather than pass stale counts off as
+  // live. Only when there's something to be stale about (skip on an idle day).
+  if (parts.length > 0) {
+    const ageMs = now - Date.parse(cache.updatedAt);
+    if (Number.isFinite(ageMs) && ageMs >= STATUSLINE_STALE_MS) {
+      const m = Math.round(ageMs / 60_000);
+      parts.push(`⚠ ${m < 90 ? `${m}m` : `${Math.round(m / 60)}h`} stale`);
+    }
   }
   if (parts.length > 0) console.log(`Oh · ${parts.join(" · ")}`);
 }
