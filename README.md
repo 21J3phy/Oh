@@ -107,7 +107,7 @@ Restart Claude Code and Codex, then run `oh insights` (or watch the daily brief)
 
 Your memory in *your* Supabase project, embeddings on *your* OpenAI key — same CLI, same features. `oh migrate` (paste `~/.oh/schema.sql` into your project's SQL editor once) → `oh init` (enter your keys) → `oh backfill`. See [One-time project setup](#one-time-project-setup-one-person-does-this) below.
 
-Prereq: **Node ≥ 20**. Working on Oh itself? Clone the repo, `npm install && npm run build`, then run `node dist/cli.js` (or `npm run dev -- <args>`). See [CONTRIBUTING.md](./CONTRIBUTING.md).
+Prereq: **Node ≥ 20**. Working on Oh itself? `git clone https://github.com/21J3phy/Oh.git oh && cd oh && npm install` (the `prepare` hook builds automatically — Windows included), then run `node dist/cli.js` (or `npm run dev -- <args>`). See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## How it works
 
@@ -171,8 +171,8 @@ Claude/Codex session files  ──(Stop/SessionEnd hook)──▶  oh capture
 > (the agent asks for their name + OpenAI key and runs setup). Manual steps:
 
 ```bash
-git clone <this repo> && cd oh
-npm install        # also builds (prepare script)
+git clone https://github.com/21J3phy/Oh.git oh && cd oh
+npm install        # also builds (prepare script) — works on Windows too
 npm link           # puts `oh` on your PATH
 oh init            # prompts for the values below, or pass them as flags:
                    #   --author --supabase-url --supabase-key --openai-key --yes
