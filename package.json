@@ -1,6 +1,6 @@
 {
   "name": "oh-brain",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Oh — give your AI a past. The verbatim memory layer for AI coding: every Claude Code + Codex session becomes memory your agent can recall (yours to recall, your team's to ask, your week to see).",
   "type": "module",
   "license": "Apache-2.0",

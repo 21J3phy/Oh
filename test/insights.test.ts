@@ -214,6 +214,22 @@ test("formatters render without blowing up, including the empty case", () => {
   assert.ok(full.includes("agent working"));
 });
 
+test("formatInsights: shows a Today summary only when a today report is supplied", () => {
+  const window = computeInsights([row({}), row({ id: "b:0", session_id: "b" })], {
+    author: "alice",
+    sinceIso: "2026-05-01T00:00:00Z",
+  });
+  assert.ok(!formatInsights(window).includes("Today"), "no Today line without a today report");
+
+  const today = computeInsights([row({ id: "t:0", session_id: "t" })], { author: "alice" });
+  const out = formatInsights(window, today);
+  assert.ok(out.includes("Today"), "today summary line shown");
+  assert.ok(out.indexOf("Today") < out.indexOf("Sessions:"), "today summary sits above the window block");
+
+  // An empty today report (e.g. a brand-new day) adds nothing.
+  assert.ok(!formatInsights(window, computeInsights([], { author: "alice" })).includes("Today"));
+});
+
 // --- per-repo time tracking --------------------------------------------------
 
 test("computeInsights: time is tracked separately per repo and totals are the sum", () => {
