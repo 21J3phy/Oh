@@ -39,11 +39,13 @@ go-to-market wedge is the re-explaining loop.
 
 ## Get Started
 
-> **Just want to try it? No signup, fully offline:** `npm i -g oh-brain && oh init --local --yes && oh backfill` — on-device store + in-process model, nothing leaves your machine. Full details under **Local — fully offline** below.
+> **Just want to try it? No signup, fully offline:** `npm i -g oh-brain && oh init --local --yes && oh backfill` — on-device store + in-process model, nothing leaves your machine. Full details under [Local mode](#local-mode) below.
 
 Oh is in **open beta** — installable by anyone from npm (`oh-brain`; the CLI is `oh`), free, **hosted, no keys**. The Oh **core** (this CLI/MCP package, the self-host schema, and the agent skills) is **open source under the [Apache License 2.0](./LICENSE)** — use it, modify it, build on it, self-host it for free forever. Only **Oh Cloud** (the hosted multi-tenant control plane in [`web/`](./web/LICENSE)) and enterprise features (SSO, audit, deploy-in-your-cloud) are licensed commercially. See [ADR 0012](./docs/adr/0012-apache-core-commercial-cloud.md).
 
-**Hosted (the default — five commands):**
+### Hosted
+
+*The default — we run it, no keys, no card. Five commands:*
 
 ```bash
 npm install -g oh-brain
@@ -65,13 +67,15 @@ Restart Claude Code and Codex (approve the one-time Codex hook-trust prompt), th
 >    - My display name
 >    - Whether I'm CREATING a new team or JOINING one (if joining, ask for the invite code; solo = create a team of one)
 >    - If there are other git repositories/projects I want to include (default: only restrict capture to this current project/repository)
-> 3. Signup and login are interactive (password + email confirmation), so tell me to run these myself in a terminal and wait for me to confirm I'm done: `oh signup --email MY_EMAIL` (choose a password, click the link in my inbox — the page it lands on may error; that's fine), then `oh login --email MY_EMAIL`
+> 3. Signup is interactive (it asks for a password), so tell me to run it myself in a terminal and wait for me to confirm I'm done: `oh signup --email MY_EMAIL` (choose a password — logged in instantly, no email step)
 > 4. Then run: `oh team create "TEAM_NAME" --author "MY_NAME"` (or: `oh team join INVITE_CODE --author "MY_NAME"`)
 > 5. Run: `oh init --yes --repos "CURRENT_REPO"` (substituting `CURRENT_REPO` with this current project's git name like 'org/repo', and appending any other repositories I specified in step 2)
 > 6. Run: `oh backfill`
 > 7. Tell me to fully restart Claude Code and Codex (approve the Codex hook-trust prompt), verify with `oh status`, and show me the invite code from `oh team` to share with teammates.
 
-**Local — fully offline (no cloud, no API, no keys — three commands):**
+### Local mode
+
+*Fully offline — no cloud, no API, no keys. Three commands:*
 
 The whole Engine runs on your machine: the store lives on disk under `~/.oh/local` and embeddings run **in-process** (a small on-device model). No account, no Supabase, no OpenAI key, no network egress — the easiest version for a security-locked org to approve, and it works on an air-gapped box. You get **Recall** and **Insights**; only the *shared* team brain needs hosted or self-host ([ADR 0013](./docs/adr/0013-local-mode-fully-offline-enterprise-onramp.md)).
 
@@ -83,7 +87,9 @@ oh backfill             # first run fetches a ~23MB model into ~/.oh/models, the
 
 Restart Claude Code and Codex, then ask away — *"what did I work on last week?"*, answered entirely on-device. Air-gapped? Pre-seed `~/.oh/models` from a connected machine and set `OH_OFFLINE=1` so it never reaches for the network at all.
 
-**Insights-only — just count your token/time usage (no `ask`, no stored text — two commands):**
+### Insights-only
+
+*Just count your token/time usage — no `ask`, no stored text. Two commands:*
 
 The lightest Oh: capture writes **only Metrics** (tokens, durations) to `~/.oh/local` and **never stores a line of your prompts or code**. No embeddings, no model download, no `ask`, no MCP server. You get `oh insights` and the session-start brief — nothing else ([ADR 0014](./docs/adr/0014-insights-only-token-counting-edition.md)).
 
@@ -95,7 +101,11 @@ oh backfill                     # counts your existing sessions (Metrics only, n
 
 Restart Claude Code and Codex, then run `oh insights` (or watch the daily brief). Flip to the full memory + `ask` any time with `oh init --local` (or hosted/self-host) followed by `oh backfill`.
 
-**Self-host (also free, forever):** your memory in *your* Supabase project, embeddings on *your* OpenAI key — same CLI, same features. `oh migrate` (paste `~/.oh/schema.sql` into your project's SQL editor once) → `oh init` (enter your keys) → `oh backfill`. See [One-time project setup](#one-time-project-setup-one-person-does-this) below.
+### Self-host
+
+*Also free, forever — your infrastructure, your keys.*
+
+Your memory in *your* Supabase project, embeddings on *your* OpenAI key — same CLI, same features. `oh migrate` (paste `~/.oh/schema.sql` into your project's SQL editor once) → `oh init` (enter your keys) → `oh backfill`. See [One-time project setup](#one-time-project-setup-one-person-does-this) below.
 
 Prereq: **Node ≥ 20**. Working on Oh itself? Clone the repo, `npm install && npm run build`, then run `node dist/cli.js` (or `npm run dev -- <args>`). See [CONTRIBUTING.md](./CONTRIBUTING.md).
 

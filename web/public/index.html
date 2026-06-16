@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Oh — give your AI a past</title>
-<meta name="description" content="Your AI starts every session from zero. Oh keeps the verbatim record of every Claude Code and Codex session — exact quotes, code blocks, full reasoning — and gives it back to your agent. Open beta, free.">
+<title>Oh — see how you actually code with AI</title>
+<meta name="description" content="After every Claude Code and Codex session, Oh shows you where your time and tokens went — and coaches you with tips drawn from your own words. No separate AI reads your code: it's built on a verbatim memory your own agent can recall and your team can ask. Open beta, free.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@300;400;500;700;800&family=Newsreader:ital,opsz,wght@1,6..72,300;1,6..72,400;1,6..72,500&family=Spline+Sans+Mono:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
@@ -273,6 +273,8 @@
   .cc-brief { color: var(--phos-soft); }
   .cc-brief .hd { color: var(--phos); font-weight: 500; }
   .cc-reply { color: var(--bone-dim); }
+  .cc-body .ins-today { color: var(--phos); }
+  .cc-body .ins-h { color: var(--phos-soft); }
   .cc-status {
     display: flex; gap: 0; padding: 8px 16px; border-top: 1px solid var(--line);
     font-size: 11px; color: var(--bone-faint); overflow-x: auto; white-space: nowrap;
@@ -326,6 +328,21 @@
   .opt-label { font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: -0.01em; color: var(--bone); margin-bottom: 4px; }
   .opt-label b { color: var(--phos); font-weight: 700; }
   .opt-label .pill { font-family: var(--mono); font-weight: 400; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); background: var(--phos); padding: 2px 8px; margin-left: 10px; vertical-align: 2px; }
+
+  /* three co-equal editions: hosted · local-only · self-host */
+  .editions { margin-top: 30px; display: flex; flex-direction: column; gap: 18px; }
+  .edition { border: 1px solid var(--line); background: var(--ink-2); padding: 24px 24px 26px; transition: border-color .3s, transform .3s; }
+  .edition:hover { border-color: var(--phos-soft); transform: translateY(-2px); }
+  .edition.hot { border-color: var(--phos-soft); background: linear-gradient(180deg, rgba(245,181,74,0.05), var(--ink-2) 45%); }
+  .ed-note { color: var(--bone-dim); font-size: 13px; margin: 8px 0 16px; max-width: 72ch; }
+  .ed-note b { color: var(--bone); font-weight: 500; }
+  .ed-note em { font-family: var(--serif); font-style: italic; color: var(--phos); }
+  .edition .install { margin-top: 0; border-color: var(--line); background: var(--ink); box-shadow: none; padding: 16px 18px 18px; }
+  .ed-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; margin-top: 14px; }
+  .ed-gh { font-size: 12px; color: var(--bone-faint); text-decoration: none; letter-spacing: 0.03em; border-bottom: 1px solid transparent; }
+  .ed-gh:hover { color: var(--cite); border-bottom-color: var(--cite); }
+  .copied-toast { font-size: 11.5px; color: var(--phos-soft); opacity: 0; transition: opacity .2s; }
+  .copied-toast.show { opacity: 1; }
 
   /* ---- agent prompt + self-host ---- */
   .agent-box { margin-top: 34px; border: 1px solid var(--line); background: var(--ink-2); }
@@ -413,8 +430,8 @@
   <div class="hero">
     <div class="hero-copy">
       <div class="sigil">Oh<span class="dot">.</span></div>
-      <p class="sub">Every session, your AI starts from zero. <em>Oh gives it a past.</em></p>
-      <p class="lede">Not RAG over your wiki. Not the three-bullet "memory" your tools keep. Oh holds the <strong style="color:var(--bone)">verbatim record</strong> of every session your agents have ever had — Claude Code, Codex — exact quotes, code blocks, the full reasoning thread, cited. Yours to recall. Your team's to ask. Your week to see.</p>
+      <p class="sub">Your AI coding is a black box. <em>Oh turns it into a mirror.</em></p>
+      <p class="lede">After every Claude Code and Codex session, Oh shows you where your time and tokens went — and quotes your own words back at the moment they cost you: <em style="color:var(--bone)">"that 'ok i think it worked' cost 418k tokens — the agent re-read the whole thread just to hear it."</em> There's no separate AI reading your code — Oh surfaces the evidence and your <strong style="color:var(--bone)">own agent</strong> (the Claude or Codex you already run) does the talking, over a verbatim record of every session. <strong style="color:var(--bone)">Your week to see · Yours to recall · Your team's to ask.</strong></p>
       <div class="cta-row">
         <a class="btn" href="#get">Install the beta — it's free</a>
         <a class="btn ghost" href="#how">How it works ↓</a>
@@ -476,9 +493,19 @@ Opus 4.8 with high effort · Claude Pro
 
   <section id="offerings">
     <div class="kicker reveal">One memory, three superpowers</div>
-    <h2 class="reveal">Things an AI can do <em>with a memory.</em></h2>
+    <h2 class="reveal">Things <em>your</em> AI can do with a memory.</h2>
     <div class="duo">
       <div class="card reveal" data-n="01">
+        <h3>Insights</h3>
+        <div class="tag">See how you actually code — then get better at it.</div>
+        <p>Time anatomy (you prompting vs. the agent working vs. you away), token economy, rabbit-hole detection — plus tips that quote your own words back at the moment they cost you. Useful solo, from day one.</p>
+        <div class="demo"><b>Today:</b> <b>5h 49m (1h 10m you · 3h 47m agent) · 2.1M fresh tokens.</b>
+<span class="a">tip:</span> that "ok i think it worked" (Fri 19:47) cost 418k
+tokens — the agent re-read the whole thread to hear it.
+<span class="c">`oh insights` for the full report</span></div>
+        <div class="lock">Rules find the evidence; <b>your own agent</b> writes the tips. Visible <b>only to you</b>.</div>
+      </div>
+      <div class="card reveal" data-n="02">
         <h3>Recall</h3>
         <div class="tag">Your AI remembers everything you two have done.</div>
         <p>Every past session — across Claude Code <em>and</em> Codex — is memory your agent can pull from. Last month's plan, last week's fix, the thing you almost remember deciding. Useful solo, from day one.</p>
@@ -489,7 +516,7 @@ ruled out JWT for the kiosk flow.
 <span class="c">[you · codex · 14 May · session 019e75d2]</span></div>
         <div class="lock">Works at <b>team-of-one</b>. The team makes it compound.</div>
       </div>
-      <div class="card reveal" data-n="02">
+      <div class="card reveal" data-n="03">
         <h3>Shared memory</h3>
         <div class="tag">Ask their agent, not them.</div>
         <p>Your agent queries your teammates' reasoning and answers with citations — instead of you interrupting the author to re-explain. Cross-tool: Codex answers from a Claude session, and vice versa.</p>
@@ -500,33 +527,41 @@ vendor rate limit and moved dedup into Redis.
 <span class="c">[Sam · claude · 12 Jun · session 0e20a191]</span></div>
         <div class="lock">Memory that outlives the session, the tool — <b>even the person</b>.</div>
       </div>
-      <div class="card reveal" data-n="03">
-        <h3>Insights</h3>
-        <div class="tag">Your week, measured from your own memory.</div>
-        <p>Time anatomy (you prompting vs. the agent working vs. you away), token economy, rabbit-hole detection — plus a brief opening every session with where you left off, and a nudge when you're circling.</p>
-        <div class="demo"><b>Last on:</b> "Build hosted multi-tenant backend" (oh · 2h ago)
-<span class="a">Oh — last 24h:</span> <b>1h 5m vibecoding (17m you · 48m agent)
-· 835k fresh tokens.</b>
-Week: 6h 12m across 10 sessions, 1 rabbit hole.
-<span class="c">`oh insights` for detail</span></div>
-        <div class="lock">Visible <b>only to you</b>. No teammate, team, or manager view. Ever.</div>
-      </div>
     </div>
     <div class="session-preview reveal">
-      <div class="cap">What opening a session actually looks like — <b>real output, founder's machine, 12 Jun</b></div>
+      <div class="cap">What <b>`oh insights`</b> actually prints — real output, founder's machine</div>
       <div class="cc-window">
-        <div class="cc-bar"><div class="lights"><span></span><span></span><span></span></div><span style="margin-left:8px">claude — ~/Documents/Oh</span></div>
-        <div class="cc-body"><span class="u">&gt; hi</span>
+        <div class="cc-bar"><div class="lights"><span></span><span></span><span></span></div><span style="margin-left:8px">~/Documents/Oh — oh insights</span></div>
+        <div class="cc-body"><span class="dot">$</span> <span class="u">oh insights</span>
 
-<span class="dot">●</span> <span class="cc-brief"><span class="hd">Oh ▸ where you left off: "Design analytics dashboard for coding insights" (Oh · 6m ago)</span>
-    today 3h 33m (1h 8m you · 2h 6m agent) · 3.0M tokens — week: 3h 33m, 9 sessions
-    tip: Your priciest moment this week: "ok i think it worked. also can you make a prompt
-    for the us…" (Fri 19:47) → 418k fresh tokens in a single turn. Whatever got pasted there
-    stayed in context for the rest of the session — trim heavy pastes, or /clear after.</span>
+Nirav's vibecoding since 2026-06-08
 
-  <span class="cc-reply">Hi! What would you like to work on?</span></div>
+<span class="ins-today">Today  ~5h 49m  (1h 10m you · 3h 47m agent) · 2.1M fresh tokens · 4 sessions</span>
+
+Sessions: 33   Exchanges: 406
+
+<span class="ins-h">Time at the wheel  ~13h 24m</span>
+  you prompting/thinking   2h 51m
+  agent working            9h 12m
+  you away (agent waited)  1h 21m
+
+<span class="ins-h">By repo</span>  (the total above is the sum)
+  aydhi      8h 41m  (1h 52m you · 6h 02m agent)  18 sessions · 7.8M tok
+  oh         4h 43m  (0h 59m you · 3h 10m agent)  15 sessions · 5.4M tok
+
+<span class="ins-h">Tokens</span>  13.2M fresh (2.1M out) + 88.4M cache reads   cache hit 87%
+  most expensive exchange  418k fresh tokens  (oh, 2026-06-12 19:47)
+
+<span class="ins-h">Friction</span>  21 corrections · 9 tool errors · 6 interrupts · 1 rabbit-hole episode
+
+<span class="ins-h">Fun</span>  peak hour 21:00 · busiest day 2026-06-12 · longest session 3h 41m
+
+<span class="ins-h">Oh tips</span> <span class="cc-reply">(from your own sessions — only you see these):</span>
+  1. Your priciest moment this week: "ok i think it worked. also can you make a
+     prompt for the us…" (oh · Fri 19:47) → 418k fresh tokens in a single turn.
+     <span class="cc-reply">Whatever got pasted there stayed in context the rest of the session.</span></div>
         <div class="cc-status">
-          <span class="seg">~/Documents/Oh</span><span class="seg">Fable 5</span><span class="seg">ctx:97%</span><span class="seg oh-seg">Oh · 3h 33m today · 3.0M tok</span>
+          <span class="seg">~/Documents/Oh</span><span class="seg">Fable 5</span><span class="seg">ctx:97%</span><span class="seg oh-seg">Oh · 5h 49m today · 2.1M tok</span>
         </div>
       </div>
     </div>
@@ -564,6 +599,7 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
       </div>
     </div>
     <div class="truth reveal">
+      <span>no AI of its own — your agent does the talking</span>
       <span>raw sessions never leave your machine</span>
       <span>secrets masked before storage</span>
       <span>insights are individual-only</span>
@@ -576,22 +612,64 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
   <section id="get">
     <div class="kicker reveal">Open beta · free · no keys</div>
     <h2 class="reveal">A few commands. <em>Then it just remembers.</em></h2>
-    <div class="opt-label reveal">Hosted — <b>we run it</b>, no keys, no card</div>
-    <div class="install reveal">
-      <div class="install-step"><span class="ic">$</span> npm install -g oh-brain</div>
-      <div class="install-step"><span class="ic">$</span> oh signup <span class="t-dim"># email + password — logged in instantly</span></div>
-      <div class="install-step"><span class="ic">$</span> oh team create "Acme" <span class="t-dim"># or: oh team join &lt;invite-code&gt; — solo counts as a team of one</span></div>
-      <div class="install-step"><span class="ic">$</span> oh init --yes <span class="t-dim"># wires Claude Code &amp; Codex (hooks + ask + insights)</span></div>
-      <div class="install-step"><span class="ic">$</span> oh backfill <span class="t-dim"># give it your past — seeds memory from your existing sessions</span></div>
-    </div>
-    <p class="prose reveal" style="font-size:13px; margin-top:18px">Restart Claude Code and Codex, then try it: <em style="font-family:var(--serif); color:var(--phos)">"ask what I was working on last week"</em>. Teammates join with your invite code. Stuck? <a href="mailto:niravsurabhi@gmail.com?subject=Oh%20beta%20help" style="color:var(--cite)">email us</a>, a human answers.</p>
+    <p class="prose reveal">Three ways to run Oh — all free during the beta, all the same CLI and the same capture. They differ in one thing: <strong>where your memory lives</strong>. Pick the row that fits.</p>
 
-    <div class="agent-box reveal">
-      <div class="agent-head">
-        <span>Lazier (recommended): paste this into your agent — Claude Code, Codex, whatever you drive — and let it do the setup</span>
-        <button class="copy-btn" id="copyPrompt">copy</button>
+    <div class="editions">
+      <div class="edition hot reveal">
+        <div class="opt-label">Hosted <span class="pill">recommended · no keys, no card</span></div>
+        <p class="ed-note"><b>We run it</b> — bring nothing. The full product, including the shared <em>team brain</em> your teammates can ask. The fastest start, and the right call for teams.</p>
+        <div class="install">
+          <div class="install-step"><span class="ic">$</span> npm install -g oh-brain</div>
+          <div class="install-step"><span class="ic">$</span> oh signup <span class="t-dim"># email + password — logged in instantly</span></div>
+          <div class="install-step"><span class="ic">$</span> oh team create "Acme" <span class="t-dim"># or: oh team join &lt;invite-code&gt; — solo = a team of one</span></div>
+          <div class="install-step"><span class="ic">$</span> oh init --yes <span class="t-dim"># wires Claude Code &amp; Codex (hooks + ask + insights)</span></div>
+          <div class="install-step"><span class="ic">$</span> oh backfill <span class="t-dim"># seeds memory from your existing sessions</span></div>
+        </div>
+        <div class="ed-actions">
+          <button class="copy-btn" data-prompt="prompt-hosted">⧉ copy a setup prompt for your agent</button>
+          <span class="copied-toast">copied ✓</span>
+        </div>
       </div>
-      <pre class="agent-prompt" id="agentPrompt">Set up Oh — the memory layer that gives my AI coding agents a past (oh-landing-mu.vercel.app) — on my machine, end to end:
+
+      <div class="edition reveal">
+        <div class="opt-label">Local-only <span class="pill">no cloud · no api · no keys</span></div>
+        <p class="ed-note"><b>Nothing leaves your machine.</b> On-device store under <em style="font-style:normal; color:var(--bone)">~/.oh/local</em>, embeddings in-process — no account, no Supabase, no OpenAI key, no egress to allow-list. You get Recall + Insights; the shared team brain is the one thing it skips. The easiest version for a security-locked org to approve — works air-gapped.</p>
+        <div class="install">
+          <div class="install-step"><span class="ic">$</span> npm install -g oh-brain</div>
+          <div class="install-step"><span class="ic">$</span> oh init --local --yes <span class="t-dim"># on-device store + in-process model, no keys, no account</span></div>
+          <div class="install-step"><span class="ic">$</span> oh backfill <span class="t-dim"># first run fetches a ~23MB model, then never touches the network again</span></div>
+        </div>
+        <div class="ed-actions">
+          <button class="copy-btn" data-prompt="prompt-local">⧉ copy a setup prompt for your agent</button>
+          <span class="copied-toast">copied ✓</span>
+          <a class="ed-gh" href="https://github.com/21J3phy/Oh#local-mode" target="_blank" rel="noopener">source &amp; docs on GitHub ↗</a>
+        </div>
+      </div>
+
+      <div class="edition reveal">
+        <div class="opt-label">Self-host <span class="pill">your supabase · your keys</span></div>
+        <p class="ed-note"><b>Your own cloud.</b> The full product — including the shared team brain — running in <em>your</em> Supabase with <em>your</em> OpenAI key. Free forever; the Elastic License keeps this path open.</p>
+        <div class="install">
+          <div class="install-step"><span class="ic">$</span> npm install -g oh-brain</div>
+          <div class="install-step"><span class="ic">$</span> oh migrate <span class="t-dim"># paste ~/.oh/schema.sql into your Supabase SQL editor, once</span></div>
+          <div class="install-step"><span class="ic">$</span> oh init <span class="t-dim"># name + Supabase URL/secret key + OpenAI key</span></div>
+          <div class="install-step"><span class="ic">$</span> oh backfill</div>
+        </div>
+        <div class="ed-actions">
+          <button class="copy-btn" data-prompt="prompt-selfhost">⧉ copy a setup prompt for your agent</button>
+          <span class="copied-toast">copied ✓</span>
+          <a class="ed-gh" href="https://github.com/21J3phy/Oh#self-host" target="_blank" rel="noopener">source &amp; docs on GitHub ↗</a>
+        </div>
+      </div>
+    </div>
+
+    <p class="prose reveal" style="font-size:13px; margin-top:24px">Whichever you pick: restart Claude Code and Codex, then try it — <em style="font-family:var(--serif); color:var(--phos)">"ask what I was working on last week"</em>. On hosted or self-host, teammates join with your invite code. Stuck? <a href="mailto:niravsurabhi@gmail.com?subject=Oh%20beta%20help" style="color:var(--cite)">email us</a>, a human answers.</p>
+
+    <p class="prose reveal" style="font-size:12.5px; margin-top:14px; color:var(--bone-faint)">Rather not run commands yourself? Each option above has a <b style="color:var(--phos-soft); font-weight:500">copy a setup prompt</b> button — paste it into your agent (Claude Code, Codex, whatever you drive) and it does the install end to end.</p>
+
+    <!-- Hidden agent setup prompts — copied by the per-edition buttons, never shown. -->
+    <div class="prompt-stash" hidden aria-hidden="true">
+      <pre id="prompt-hosted">Set up Oh — the memory layer that gives my AI coding agents a past (oh-landing-mu.vercel.app) — on my machine in HOSTED mode (you run it for me, no API key, no card):
 
 1. Check Node ≥ 20, then run: npm install -g oh-brain
 2. Ask me for:
@@ -606,27 +684,26 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
 5. Run: oh init --yes --repos "CURRENT_REPO" (substituting CURRENT_REPO with this current project's git name like 'org/repo', and appending any other repositories I specified in step 2)
 6. Run: oh backfill   (seeds my memory from my existing Claude/Codex sessions)
 7. Tell me to fully restart Claude Code and Codex (approve the Codex hook-trust prompt), verify with oh status, and show me the invite code from oh team to share with teammates.</pre>
-    </div>
+      <pre id="prompt-local">Set up Oh — the memory layer that gives my AI coding agents a past (oh-landing-mu.vercel.app) — on my machine in fully-offline LOCAL mode. Nothing leaves my machine: no account, no Supabase, no API key, no network egress.
 
-    <div class="opt-label reveal" style="margin-top:46px">Or run it <b>fully offline</b><span class="pill">no cloud · no api · no keys</span></div>
-    <p class="prose reveal" style="font-size:13px; margin-top:10px">Nothing leaves your machine. The memory lives on disk under <em style="font-style:normal; color:var(--bone)">~/.oh/local</em> and embeddings run in-process — no account, no Supabase, no OpenAI key, no network egress to allow-list. The easiest version for a security-locked org to approve, and it works on an air-gapped box too.</p>
-    <div class="install reveal" style="margin-top:16px">
-      <div class="install-step"><span class="ic">$</span> npm install -g oh-brain</div>
-      <div class="install-step"><span class="ic">$</span> oh init --local --yes <span class="t-dim"># on-device store + in-process model — wires Claude &amp; Codex, no keys, no account</span></div>
-      <div class="install-step"><span class="ic">$</span> oh backfill <span class="t-dim"># first run fetches a ~23MB model, then it never touches the network again</span></div>
-    </div>
-    <p class="prose reveal" style="font-size:13px; margin-top:14px">Restart Claude Code and Codex, then ask away — <em style="font-family:var(--serif); color:var(--phos)">"what did I work on last week?"</em>, answered entirely on-device. You get Recall and Insights; the shared team brain is the one thing that needs hosted or self-host.</p>
+1. Check Node ≥ 20, then run: npm install -g oh-brain
+2. Ask me for my display name, and whether there are other git repositories/projects to include (default: only this current project/repository).
+3. Run: oh init --local --yes --author "MY_NAME" --repos "CURRENT_REPO" (substitute CURRENT_REPO with this project's git name like 'org/repo', appending any others I named). This wires Claude Code & Codex with an on-device store + in-process embeddings — no keys, no account.
+4. Run: oh backfill   (the first run downloads a ~23MB embedding model, then it never touches the network again; this seeds my memory from my existing Claude/Codex sessions).
+5. Tell me to fully restart Claude Code and Codex (approve the Codex hook-trust prompt), then verify with oh status and try: "ask what I worked on last week". Remind me local mode gives Recall + Insights only — there is no shared team brain.</pre>
+      <pre id="prompt-selfhost">Set up Oh — the memory layer that gives my AI coding agents a past (oh-landing-mu.vercel.app) — SELF-HOSTED in my own infrastructure: my Supabase project and my OpenAI key.
 
-    <details class="selfhost reveal">
-      <summary>Prefer your own infrastructure? Self-host (also free, forever)</summary>
-      <p class="prose" style="font-size:13px; margin-top:14px">Your memory lives in <em>your</em> Supabase project; embeddings use <em>your</em> OpenAI key. Same CLI, same features — the Elastic License guarantees this path stays open.</p>
-      <div class="install" style="margin-top:16px; border-color: var(--line); box-shadow: none;">
-        <div class="install-step"><span class="ic">$</span> npm install -g oh-brain</div>
-        <div class="install-step"><span class="ic">$</span> oh migrate <span class="t-dim"># paste ~/.oh/schema.sql into your Supabase project's SQL editor, once</span></div>
-        <div class="install-step"><span class="ic">$</span> oh init <span class="t-dim"># name + Supabase URL/secret key + OpenAI key</span></div>
-        <div class="install-step"><span class="ic">$</span> oh backfill</div>
-      </div>
-    </details>
+1. Check Node ≥ 20, then run: npm install -g oh-brain
+2. Ask me for:
+   - My display name
+   - My Supabase project URL and its secret (service-role) key
+   - My OpenAI API key
+   - Any other git repositories/projects to include (default: only this current project/repository)
+3. Run: oh migrate — then tell me to paste the printed ~/.oh/schema.sql into my Supabase project's SQL editor and run it once. Wait for me to confirm it's done.
+4. Run: oh init (it is interactive) and walk me through entering my name, Supabase URL + secret key, and OpenAI key. Restrict capture to "CURRENT_REPO" plus any others I named.
+5. Run: oh backfill   (seeds my memory from my existing Claude/Codex sessions).
+6. Tell me to fully restart Claude Code and Codex (approve the Codex hook-trust prompt), verify with oh status, and share the invite code from oh team with my teammates.</pre>
+    </div>
   </section>
 
   <section id="pricing">
@@ -693,14 +770,20 @@ Week: 6h 12m across 10 sessions, 1 rabbit hole.
   }, { threshold: 0.12 });
   document.querySelectorAll(".reveal").forEach((el) => ro.observe(el));
 
-  // ---- copy the agent prompt ----
-  const copyBtn = document.getElementById("copyPrompt");
-  copyBtn?.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(document.getElementById("agentPrompt").textContent.trim());
-      copyBtn.textContent = "copied ✓";
-      setTimeout(() => (copyBtn.textContent = "copy"), 2000);
-    } catch { copyBtn.textContent = "select + copy"; }
+  // ---- copy a per-edition agent setup prompt (hidden text, button only) ----
+  document.querySelectorAll(".copy-btn[data-prompt]").forEach((btn) => {
+    const toast = btn.parentElement?.querySelector(".copied-toast");
+    btn.addEventListener("click", async () => {
+      const src = document.getElementById(btn.dataset.prompt);
+      if (!src) return;
+      try {
+        await navigator.clipboard.writeText(src.textContent.trim());
+        if (toast) { toast.textContent = "copied ✓"; toast.classList.add("show"); }
+        setTimeout(() => toast?.classList.remove("show"), 2200);
+      } catch {
+        if (toast) { toast.textContent = "copy failed — try again"; toast.classList.add("show"); }
+      }
+    });
   });
 
   // ---- memory decay: the quote literally fades as you read it ----
