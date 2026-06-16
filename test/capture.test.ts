@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { effectiveFromIndex, gitRepoIdentity, repoAllowed, resolveProjectKey } from "../src/capture.js";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  effectiveFromIndex,
+  gitRepoIdentity,
+  repoAllowed,
+  resolveProjectKey,
+  vscodeWorkspaceCwd,
+} from "../src/capture.js";
 import { isIncognito } from "../src/config.js";
 
 test("no allowlist captures everything", () => {
@@ -31,6 +40,24 @@ test("gitRepoIdentity prefers the git remote, falls back to the basename", () =>
   // A path with no git remote → the folder basename.
   assert.equal(gitRepoIdentity("/definitely/not/a/repo/myproj"), "myproj");
   assert.equal(gitRepoIdentity(null), "unknown");
+});
+
+// --- VS Code workspace cwd recovery (Copilot Chat journals carry none) ----
+
+test("vscodeWorkspaceCwd: recovers the folder from workspace.json", () => {
+  // …/workspaceStorage/<hash>/{workspace.json, chatSessions/<id>.jsonl}
+  const wsDir = mkdtempSync(join(tmpdir(), "oh-ws-"));
+  mkdirSync(join(wsDir, "chatSessions"));
+  writeFileSync(join(wsDir, "workspace.json"), JSON.stringify({ folder: "file:///Users/me/Projects/My%20App" }));
+  const sessionFile = join(wsDir, "chatSessions", "abc.jsonl");
+  // file:// URL is decoded (so %20 → space) into a real path.
+  assert.equal(vscodeWorkspaceCwd(sessionFile), "/Users/me/Projects/My App");
+});
+
+test("vscodeWorkspaceCwd: returns null when there's no workspace.json (empty-window)", () => {
+  const wsDir = mkdtempSync(join(tmpdir(), "oh-ws-"));
+  mkdirSync(join(wsDir, "chatSessions"));
+  assert.equal(vscodeWorkspaceCwd(join(wsDir, "chatSessions", "abc.jsonl")), null);
 });
 
 // --- Incognito (ADR 0011) -------------------------------------------------
