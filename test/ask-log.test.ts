@@ -77,3 +77,33 @@ test("an unanswered ask logs hits=0; a failing log never breaks the answer", asy
   await new Promise((res) => setImmediate(res));
   assert.equal(r1.hits.length, 1, "answer survives a logAsk failure");
 });
+
+const failingEmbedder = {
+  embed: async () => {
+    throw new Error("model runtime not installed");
+  },
+  embedOne: async () => {
+    throw new Error("model runtime not installed");
+  },
+} as never;
+
+test("ask falls back to keywordMatch when the embedding model fails (local mode)", async () => {
+  const logged: AskLogEntry[] = [];
+  const db = stubDb([], logged);
+  let kwQuery: string | null = null;
+  db.keywordMatch = async (q) => {
+    kwQuery = q;
+    return [row];
+  };
+  const r = await ask(cfg, db, failingEmbedder, { question: "why X?" });
+  assert.equal(kwQuery, "why X?", "the question is keyword-searched");
+  assert.equal(r.hits.length, 1, "keyword fallback still answers");
+});
+
+test("ask surfaces the embed error when no keyword fallback exists (hosted/self-host)", async () => {
+  const db = stubDb([], []); // no keywordMatch
+  await assert.rejects(
+    ask(cfg, db, failingEmbedder, { question: "why X?" }),
+    /model runtime not installed/,
+  );
+});

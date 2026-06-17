@@ -107,6 +107,45 @@ test(
 );
 
 test(
+  "keywordMatch scores by term overlap and honours filters (embed-failure fallback)",
+  withDir(async (dir) => {
+    const db = createLocalDb(dir);
+    await db.upsertChunks(
+      [
+        ex("s1", 0, "decided to use JWT auth with refresh tokens", { author: "alice", repo: "r1" }),
+        ex("s2", 0, "switched billing to Stripe metered usage", { author: "bob", repo: "r2" }),
+      ],
+      [
+        [1, 0, 0],
+        [0, 1, 0],
+      ],
+    );
+    const hits = await db.keywordMatch!("how did we do auth tokens", 10, {});
+    assert.equal(hits[0]!.text, "decided to use JWT auth with refresh tokens", "more term overlap ranks first");
+    assert.ok(hits[0]!.similarity > 0 && hits[0]!.similarity <= 1, "similarity is a 0..1 proxy");
+
+    assert.equal((await db.keywordMatch!("billing", 10, { repo: "r1" })).length, 0, "repo filter applies");
+    assert.equal((await db.keywordMatch!("zzz nonexistent", 10, {})).length, 0, "no matches → empty");
+    assert.equal((await db.keywordMatch!("", 10, {})).length, 0, "empty query → empty");
+  }),
+);
+
+test(
+  "keywordMatch is fuzzy — tolerates typos and substrings",
+  withDir(async (dir) => {
+    const db = createLocalDb(dir);
+    await db.upsertChunks(
+      [ex("s1", 0, "decided to use JWT authentication with refresh tokens")],
+      [[1, 0, 0]],
+    );
+    assert.equal((await db.keywordMatch!("athentication", 10, {})).length, 1, "typo still matches");
+    assert.equal((await db.keywordMatch!("auth", 10, {})).length, 1, "substring still matches");
+    assert.equal((await db.keywordMatch!("tokenz", 10, {})).length, 1, "one-edit typo matches");
+    assert.equal((await db.keywordMatch!("kubernetes", 10, {})).length, 0, "unrelated term does not match");
+  }),
+);
+
+test(
   "metrics + asks round-trip; askStats counts answered",
   withDir(async (dir) => {
     const db = createLocalDb(dir);
