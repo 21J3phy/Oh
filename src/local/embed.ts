@@ -39,7 +39,7 @@ async function loadRuntime(): Promise<any> {
 
 function getPipe(model: string): Promise<(texts: string[]) => Promise<number[][]>> {
   if (pipePromise) return pipePromise;
-  pipePromise = (async () => {
+  const p = (async () => {
     const tf = await loadRuntime();
     // Keep all weights under ~/.oh so the footprint is one predictable dir, and
     // allow the offline path (use the cache, don't re-fetch) once present.
@@ -57,7 +57,14 @@ function getPipe(model: string): Promise<(texts: string[]) => Promise<number[][]
       return out.tolist() as number[][];
     };
   })();
-  return pipePromise;
+  // Don't permanently cache a failed load: if the runtime is missing or the
+  // first download fails, clear the promise so a later call (after the user
+  // installs it / comes back online) retries instead of replaying the rejection.
+  pipePromise = p;
+  p.catch(() => {
+    if (pipePromise === p) pipePromise = null;
+  });
+  return p;
 }
 
 function truncate(text: string): string {

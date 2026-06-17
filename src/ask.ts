@@ -78,13 +78,25 @@ export async function ask(
   const question = params.question?.trim();
   if (!question) return { hits: [], mostRecent: null };
 
-  const embedding = await embedder.embedOne(question);
   const filters: MatchFilters = {
     repo: params.repo?.trim() || null,
     author: params.who?.trim() ? `%${params.who.trim()}%` : null,
     since: parseSince(params.since),
   };
-  const rows = await db.matchChunks(embedding, CANDIDATES, filters);
+
+  // Vector search is the primary path. If the embedding model is unavailable
+  // (local mode: runtime not installed, or offline with no cached weights),
+  // fall back to a lexical keyword search over chunk text rather than failing
+  // the ask outright — only the local brain provides `keywordMatch`.
+  let rows: MatchRow[];
+  try {
+    const embedding = await embedder.embedOne(question);
+    rows = await db.matchChunks(embedding, CANDIDATES, filters);
+  } catch (err) {
+    if (!db.keywordMatch) throw err;
+    log("ask", `embedding unavailable (${(err as Error).message}); falling back to keyword search`);
+    rows = await db.keywordMatch(question, CANDIDATES, filters);
+  }
   const hits = rerank(rows, cfg, Date.now()).slice(0, TOP_K);
 
   // Deflection instrumentation (ADR 0008): every ask is logged; an answered

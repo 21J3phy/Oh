@@ -86,6 +86,80 @@ function cosine(a: number[], b: number[]): number {
   return dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
 
+// Fuzzy keyword-search tuning. A term "matches" a word when their similarity
+// clears the threshold; substring hits and typos (a bounded edit distance)
+// both qualify, so "athu"/"authetication" still find "auth"/"authentication".
+const FUZZY_THRESHOLD = 0.7;
+
+/** Split text into distinct lowercased word tokens (≥2 chars). */
+function tokenize(text: string): string[] {
+  const seen = new Set<string>();
+  for (const t of text.toLowerCase().split(/[^a-z0-9]+/)) {
+    if (t.length >= 2) seen.add(t);
+  }
+  return [...seen];
+}
+
+/** Distinct query terms (≥2 chars) — short tokens match everything, so drop. */
+function queryTerms(query: string): string[] {
+  return tokenize(query);
+}
+
+/** Levenshtein edit distance, capped at `max`: bails to `max + 1` as soon as a
+ *  whole row exceeds the cap, so far-apart strings stay cheap. */
+function editDistance(a: string, b: string, max: number): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  let curr = new Array<number>(b.length + 1);
+  for (let i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(prev[j]! + 1, curr[j - 1]! + 1, prev[j - 1]! + cost);
+      if (curr[j]! < rowMin) rowMin = curr[j]!;
+    }
+    if (rowMin > max) return max + 1;
+    [prev, curr] = [curr, prev];
+  }
+  return prev[b.length]!;
+}
+
+/** How well a query term matches a single word (0..1): exact, substring, or a
+ *  typo within a length-scaled edit budget — anything further apart is 0. */
+function termSimilarity(term: string, word: string): number {
+  if (term === word) return 1;
+  // A query term appearing inside a word (e.g. "auth" in "authenticate") is a
+  // strong match — this preserves the old plain-substring behaviour.
+  if (word.includes(term)) return 0.9;
+  if (term.includes(word)) return word.length / term.length;
+  // Typo tolerance: ~1 edit for short terms, ~2 for longer ones.
+  const max = term.length <= 4 ? 1 : 2;
+  const d = editDistance(term, word, max);
+  if (d > max) return 0;
+  return 1 - d / Math.max(term.length, word.length);
+}
+
+/** Fuzzy overlap of query terms against `text` (0..1) — a similarity proxy in
+ *  the same range as cosine, so `rerank`'s recency blend still works. Each term
+ *  contributes its best per-word similarity once it clears the threshold. */
+function fuzzyScore(terms: string[], text: string): number {
+  const words = tokenize(text);
+  let total = 0;
+  for (const t of terms) {
+    let best = 0;
+    for (const w of words) {
+      const s = termSimilarity(t, w);
+      if (s > best) {
+        best = s;
+        if (best === 1) break;
+      }
+    }
+    if (best >= FUZZY_THRESHOLD) total += best;
+  }
+  return total / terms.length;
+}
+
 /** A file-backed Team Brain that lives entirely on this machine. `dir` is
  *  injectable for tests; production uses ~/.oh/local. */
 export function createLocalDb(dir: string = LOCAL_DIR): Db {
@@ -284,6 +358,35 @@ export function createLocalDb(dir: string = LOCAL_DIR): Db {
           text: r.text,
           ts: r.ts,
           similarity: cosine(embedding, r.embedding),
+        });
+      }
+      scored.sort((a, b) => b.similarity - a.similarity);
+      return scored.slice(0, matchCount);
+    },
+
+    async keywordMatch(
+      query: string,
+      matchCount: number,
+      filters: MatchFilters,
+    ): Promise<MatchRow[]> {
+      const terms = queryTerms(query);
+      if (terms.length === 0) return [];
+      const scored: MatchRow[] = [];
+      for (const r of loadChunks()) {
+        if (!matchesFilters(r, filters)) continue;
+        const similarity = fuzzyScore(terms, r.text);
+        if (similarity === 0) continue;
+        scored.push({
+          id: r.id,
+          session_id: r.session_id,
+          author: r.author,
+          tool: r.tool,
+          repo: r.repo,
+          cwd: r.cwd,
+          exchange_index: r.exchange_index,
+          text: r.text,
+          ts: r.ts,
+          similarity,
         });
       }
       scored.sort((a, b) => b.similarity - a.similarity);

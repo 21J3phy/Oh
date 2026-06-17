@@ -90,6 +90,15 @@ export interface Db {
     matchCount: number,
     filters: MatchFilters,
   ): Promise<MatchRow[]>;
+  /** Fuzzy keyword (non-vector) search over chunk text — the fallback `ask`
+   *  drops to when the embedding model is unavailable. Tolerates typos and
+   *  substrings. Only the local brain implements it; hosted/self-host leave it
+   *  undefined and surface the embed error. */
+  keywordMatch?(
+    query: string,
+    matchCount: number,
+    filters: MatchFilters,
+  ): Promise<MatchRow[]>;
   chunkCount(): Promise<number>;
 }
 
