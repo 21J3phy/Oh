@@ -5,9 +5,10 @@
 
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, renameSync } from "node:fs";
-import { nudgePath } from "./capture.js";
+import { gitRepoIdentity, nudgePath } from "./capture.js";
 import {
   formatBrief,
+  pickRepoBrief,
   readBriefMarker,
   readInsightsCache,
   readTipRotation,
@@ -51,6 +52,14 @@ function findSessionId(payload: unknown): string | null {
   return typeof candidate === "string" && candidate ? candidate : null;
 }
 
+/** The working directory of the session, from the hook payload (Claude/Codex). */
+function findCwd(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const p = payload as Record<string, unknown>;
+  const candidate = p["cwd"] ?? p["workspace"] ?? p["working_directory"];
+  return typeof candidate === "string" && candidate ? candidate : null;
+}
+
 /**
  * If a detached capture flagged this session as circling, show the one-shot
  * Nudge via the hook's `systemMessage` output (warning-style, never blocks)
@@ -83,15 +92,22 @@ function deliverNudge(sessionId: string | null): void {
  * model instead. So we emit `additionalContext` instructing the agent to
  * surface the brief at the top of its first reply.
  */
-function deliverBrief(): void {
+function deliverBrief(cwd: string | null): void {
   try {
     const now = Date.now();
-    const cadence = readPartialConfig().brief ?? "session";
+    const cfg = readPartialConfig();
+    const cadence = cfg.brief ?? "session";
     if (!shouldShowBrief(cadence, readBriefMarker(), now)) return;
     const cache = readInsightsCache(now);
     if (!cache) return; // no/stale cache — silence beats wrong numbers
+    // Repo-scoped by default: show only the project this session is in, and stay
+    // silent for an untracked repo (no slice). Off → the all-repos rollup.
+    const scoped = cfg.repoScopedBrief !== false;
+    const repo = scoped && cwd ? gitRepoIdentity(cwd) : null;
+    const data = pickRepoBrief(cache, repo, scoped);
+    if (!data) return; // untracked project (or no cwd) — no insights
     const rotation = readTipRotation();
-    const message = formatBrief(cache, now, rotation);
+    const message = formatBrief(data, now, rotation);
     if (!message) return;
     writeBriefMarker(now); // mark before printing — never twice in a day
     writeTipRotation(rotation + 1); // advance so the next brief shows a new tip
@@ -131,7 +147,7 @@ export async function runHook(tool: Tool, cliPath: string): Promise<void> {
   // burns the daily marker — only a genuine startup gets the brief.
   if (eventName(payload) === "SessionStart") {
     const source = (payload as Record<string, unknown> | null)?.["source"];
-    if (source === "startup" || source == null) deliverBrief();
+    if (source === "startup" || source == null) deliverBrief(findCwd(payload));
     process.exit(0);
   }
 

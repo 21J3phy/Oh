@@ -21,7 +21,7 @@ import { parseCopilot } from "./parse/copilot.js";
 import { repoFromCwd, toExchanges } from "./normalize.js";
 import { scrubText } from "./scrub.js";
 import { detectRabbitHole, formatNudge } from "./insights.js";
-import { lastSnippet, refreshInsightsCache, type LastSession } from "./brief.js";
+import { lastSnippet, readLastSessionMap, refreshInsightsCache, type LastSession } from "./brief.js";
 import type { Db } from "./db.js";
 import type { Embedder } from "./embed.js";
 import { log } from "./log.js";
@@ -248,17 +248,19 @@ function recordLastSession(parsed: ParseResult, exchanges: Exchange[]): void {
   if (!last) return;
   try {
     const ts = last.metrics.endedAt;
-    if (existsSync(LAST_SESSION_PATH)) {
-      const prev = JSON.parse(readFileSync(LAST_SESSION_PATH, "utf8")) as LastSession;
-      if (Date.parse(prev.ts) >= Date.parse(ts)) return;
-    }
+    // Newest-wins per repo, so the brief's "where you left off" is correct for
+    // whichever project the next session opens in (not just the most recent one).
+    const map = readLastSessionMap();
+    const prev = map[last.repo];
+    if (prev && Date.parse(prev.ts) >= Date.parse(ts)) return;
     // Prefer the tool's own title; fall back to the last prompt — but don't
     // let a throwaway ("hi", "test") session steal the where-you-left-off slot.
     const summary = parsed.summary?.trim() || lastSnippet(last.reasoningText);
     if (!parsed.summary?.trim() && summary.length < 15) return;
     const entry: LastSession = { summary, repo: last.repo, ts };
+    map[last.repo] = entry;
     ensureDirs();
-    writeFileSync(LAST_SESSION_PATH, JSON.stringify(entry));
+    writeFileSync(LAST_SESSION_PATH, JSON.stringify(map));
   } catch {
     // decoration only — never fail capture over it
   }
