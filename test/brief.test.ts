@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatBrief, formatTokenChart, shouldShowBrief, type DailyStat, type InsightsCache } from "../src/brief.js";
+import {
+  formatBrief,
+  formatTokenChart,
+  pickRepoBrief,
+  shouldShowBrief,
+  type BriefData,
+  type DailyStat,
+  type InsightsCache,
+} from "../src/brief.js";
 import { computeInsights } from "../src/insights.js";
 import type { MetricsRow } from "../src/db.js";
 
@@ -127,6 +135,19 @@ test("formatBrief: surfaces rabbit holes, returns null on an empty week", () => 
   assert.ok(msg.includes("1 rabbit hole"), "rabbit holes make the brief");
 
   assert.equal(formatBrief(cache([], [])), null, "empty week → stay silent");
+});
+
+test("pickRepoBrief: scoped returns only the current repo's slice, silent on untracked", () => {
+  const ohSlice: BriefData = { day: computeInsights([], {}), week: computeInsights([row({ repo: "Oh" })], {}) };
+  const aydhiSlice: BriefData = { day: computeInsights([], {}), week: computeInsights([row({ repo: "aydhi" })], {}) };
+  const c = cache([], []);
+  c.byRepo = { Oh: ohSlice, aydhi: aydhiSlice };
+
+  assert.equal(pickRepoBrief(c, "Oh", true), ohSlice, "scoped → this repo's slice");
+  assert.equal(pickRepoBrief(c, "aydhi", true), aydhiSlice, "scoped → the other repo's slice");
+  assert.equal(pickRepoBrief(c, "untracked-proj", true), null, "untracked repo → no brief");
+  assert.equal(pickRepoBrief(c, null, true), null, "no cwd → no brief");
+  assert.equal(pickRepoBrief(c, "untracked-proj", false), c, "unscoped → the all-repos rollup, always");
 });
 
 function day(over: Partial<DailyStat>): DailyStat {

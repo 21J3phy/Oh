@@ -28,7 +28,7 @@ import { captureAll, captureFile, gitRepoIdentity } from "./capture.js";
 import { shortRepo } from "./normalize.js";
 import { ask, formatAskResult, parseSince } from "./ask.js";
 import { computeInsights, formatInsights, generateTips } from "./insights.js";
-import { formatDailyHistory, readInsightsCache, refreshInsightsCache } from "./brief.js";
+import { formatDailyHistory, pickRepoBrief, readInsightsCache, refreshInsightsCache } from "./brief.js";
 import { runMcpServer } from "./mcp.js";
 import { DEFAULT_LOCAL_MODEL as LOCAL_MODEL } from "./local/embed.js";
 import { runHook } from "./hook.js";
@@ -647,7 +647,13 @@ function cmdStatusline(): void {
   const now = Date.now();
   const cache = readInsightsCache(now);
   if (!cache) return; // print nothing — Claude Code shows nothing
-  const d = cache.day;
+  // Scope to the project this statusline is rendering in (default), so today's
+  // numbers reflect the current repo only — and stay blank on an untracked one.
+  const cfg = readPartialConfig();
+  const scoped = cfg.repoScopedBrief !== false;
+  const data = pickRepoBrief(cache, scoped ? gitRepoIdentity(process.cwd()) : null, scoped);
+  if (!data) return; // untracked project — nothing to show
+  const d = data.day;
   const parts: string[] = [];
   // No last-worked-on here: the status bar is tight, and the brief carries it.
   if (d.exchanges > 0) {
@@ -712,7 +718,10 @@ async function cmdStatus(): Promise<void> {
     console.log(`recency:   half-life ${cfg.recencyHalfLifeDays}d, weight ${cfg.recencyWeight}`);
   }
   console.log(`thinking:  ${cfg.includeThinking ? "included" : "excluded"}`);
-  console.log(`brief:     ${cfg.brief ?? "daily"} (session-start insights brief)`);
+  console.log(
+    `brief:     ${cfg.brief ?? "daily"} (session-start insights brief)` +
+      `${cfg.repoScopedBrief === false ? ", all repos" : ", current repo only (repoScopedBrief=false to widen)"}`,
+  );
   console.log(
     `projects:  ${cfg.repos && cfg.repos.length > 0 ? cfg.repos.join(", ") : "ALL (no git-project filter)"}`,
   );

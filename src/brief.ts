@@ -21,9 +21,12 @@ import type { Config, Tool } from "./types.js";
 /** Don't render a cache older than this — better silence than stale numbers. */
 const CACHE_MAX_AGE_MS = 26 * 3_600_000;
 
-export interface InsightsCache {
-  updatedAt: string;
-  author: string;
+/**
+ * Everything `formatBrief` needs to render one brief — either the all-repos
+ * rollup (the cache's top-level fields) or a single repo's slice (a `byRepo`
+ * entry). Kept as its own shape so the same renderer serves both.
+ */
+export interface BriefData {
   day: InsightsReport; // last 24h
   week: InsightsReport; // last 7d
   /** What you were last working on — the tool's own session summary when available. */
@@ -38,11 +41,47 @@ export interface InsightsCache {
   tips?: string[];
 }
 
-/** ~/.oh/last-session.json — written by capture (newest session wins). */
+export interface InsightsCache extends BriefData {
+  updatedAt: string;
+  author: string;
+  /**
+   * Per-repo brief slices, keyed by the same git-repo identity stored on each
+   * row (`gitRepoIdentity`). The SessionStart hook picks the entry for the repo
+   * the session is starting in, so insights never bleed across projects; a repo
+   * with no captured history is simply absent (no brief). Top-level day/week/
+   * tips remain the all-repos rollup, used when repoScopedBrief is off.
+   */
+  byRepo?: Record<string, BriefData>;
+}
+
+/** ~/.oh/last-session.json — written by capture, newest session wins per repo. */
 export interface LastSession {
   summary: string;
   repo: string | null;
   ts: string;
+}
+
+/** The on-disk shape of last-session.json: newest session per git-repo identity. */
+export type LastSessionMap = Record<string, LastSession>;
+
+/**
+ * Read last-session.json as a per-repo map, tolerating the legacy single-entry
+ * shape ({summary, repo, ts}) written before per-repo tracking existed.
+ */
+export function readLastSessionMap(): LastSessionMap {
+  if (!existsSync(LAST_SESSION_PATH)) return {};
+  try {
+    const raw = JSON.parse(readFileSync(LAST_SESSION_PATH, "utf8")) as unknown;
+    if (!raw || typeof raw !== "object") return {};
+    // Legacy: a bare LastSession (has a top-level string `summary`).
+    if (typeof (raw as LastSession).summary === "string") {
+      const ls = raw as LastSession;
+      return { [ls.repo ?? "unknown"]: ls };
+    }
+    return raw as LastSessionMap;
+  } catch {
+    return {};
+  }
 }
 
 /** One frozen day in ~/.oh/insights-daily.json (compact subset of a report). */
@@ -149,14 +188,26 @@ export async function refreshInsightsCache(cfg: Config, db: Db): Promise<void> {
   // ever holds today + this week). Recomputing the fetched window self-heals
   // gaps; days that age out of the window stay as last written.
   persistDailyHistory(rows, cfg.author);
-  // "Last on": prefer the local last-session record (carries the tool's own
-  // summary); fall back to the newest chunk's opening prompt from the store.
+  // Captured prompt text, keyed by chunk id — the raw material for both the
+  // grounded tips and the per-repo "where you left off" fallback. Empty on an
+  // insights-only install (nothing is stored), which is fine: the brief just
+  // drops to its stat line.
+  let textsById = new Map<string, string>();
+  try {
+    const texts = await db.fetchOwnChunkTexts(cfg.author, weekIso);
+    textsById = new Map(texts.map((t) => [t.id, t.text]));
+  } catch {
+    // optional decoration — never block the cache on it
+  }
+  const lastMap = readLastSessionMap();
+  // "Last on" (all-repos rollup): prefer the newest recorded session summary;
+  // fall back to the newest chunk's opening prompt from the store.
   let last: InsightsCache["last"] = null;
   try {
-    if (existsSync(LAST_SESSION_PATH)) {
-      const ls = JSON.parse(readFileSync(LAST_SESSION_PATH, "utf8")) as LastSession;
-      if (ls.summary) last = { snippet: ls.summary, repo: ls.repo, ts: ls.ts };
-    }
+    const newest = Object.values(lastMap)
+      .filter((ls) => ls.summary)
+      .sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts))[0];
+    if (newest) last = { snippet: newest.summary, repo: newest.repo, ts: newest.ts };
     if (!last) {
       const chunk = await db.latestChunk(cfg.author);
       if (chunk) last = { snippet: lastSnippet(chunk.text), repo: chunk.repo, ts: chunk.ts };
@@ -164,26 +215,77 @@ export async function refreshInsightsCache(cfg: Config, db: Db): Promise<void> {
   } catch {
     // optional decoration — never block the cache on it
   }
-  let tips: string[] = [];
-  try {
-    const texts = await db.fetchOwnChunkTexts(cfg.author, weekIso);
-    // Mechanically-grounded drafts — the real moments + verbatim quotes. The
-    // hook hands one to the user's own agent to personalize (see InsightsCache).
-    // Keep the full ranked set so the brief can rotate through them.
-    tips = generateTips(rows, texts).map((t) => t.text);
-  } catch {
-    // optional decoration — never block the cache on it
+  // Mechanically-grounded drafts — the real moments + verbatim quotes. The hook
+  // hands one to the user's own agent to personalize (see InsightsCache). Keep
+  // the full ranked set so the brief can rotate through them.
+  const tipsFrom = (rs: MetricsRow[]): string[] => {
+    try {
+      return generateTips(rs, [...textsById].map(([id, text]) => ({ id, text }))).map((t) => t.text);
+    } catch {
+      return [];
+    }
+  };
+  const dayRows = rows.filter((r) => r.ts >= dayIso);
+
+  // Per-repo slices — the repo-scoped brief reads exactly one of these so a
+  // session never sees another project's numbers (or any, on an untracked repo).
+  const byRepo: Record<string, BriefData> = {};
+  for (const repo of new Set(rows.map((r) => r.repo ?? "unknown"))) {
+    const repoWeek = rows.filter((r) => (r.repo ?? "unknown") === repo);
+    const repoDay = dayRows.filter((r) => (r.repo ?? "unknown") === repo);
+    byRepo[repo] = {
+      day: computeInsights(repoDay, { author: cfg.author, sinceIso: dayIso }),
+      week: computeInsights(repoWeek, { author: cfg.author, sinceIso: weekIso }),
+      last: repoLast(repo, repoWeek, textsById, lastMap),
+      tips: tipsFrom(repoWeek),
+    };
   }
+
   const cache: InsightsCache = {
     updatedAt: new Date(now).toISOString(),
     author: cfg.author,
-    day: computeInsights(rows.filter((r) => r.ts >= dayIso), { author: cfg.author, sinceIso: dayIso }),
+    day: computeInsights(dayRows, { author: cfg.author, sinceIso: dayIso }),
     week: computeInsights(rows, { author: cfg.author, sinceIso: weekIso }),
     last,
-    tips,
+    tips: tipsFrom(rows),
+    byRepo,
   };
   ensureDirs();
   writeFileSync(INSIGHTS_CACHE_PATH, JSON.stringify(cache));
+}
+
+/** This repo's "where you left off": its recorded summary, else its newest captured prompt. */
+function repoLast(
+  repo: string,
+  repoRows: MetricsRow[],
+  textsById: Map<string, string>,
+  lastMap: LastSessionMap,
+): InsightsCache["last"] {
+  const rec = lastMap[repo];
+  if (rec?.summary) return { snippet: rec.summary, repo: rec.repo, ts: rec.ts };
+  let newest: MetricsRow | null = null;
+  for (const r of repoRows) if (!newest || r.ts > newest.ts) newest = r;
+  if (newest) {
+    const text = textsById.get(newest.id);
+    if (text) return { snippet: lastSnippet(text), repo, ts: newest.ts };
+  }
+  return null;
+}
+
+/**
+ * Pick the brief to render for a session starting in `repo`. When scoped (the
+ * default), returns that repo's slice — or null if the repo has no captured
+ * history (an untracked project gets no brief). When unscoped, returns the
+ * all-repos rollup.
+ */
+export function pickRepoBrief(
+  cache: InsightsCache,
+  repo: string | null,
+  scoped: boolean,
+): BriefData | null {
+  if (!scoped) return cache;
+  if (!repo) return null;
+  return cache.byRepo?.[repo] ?? null;
 }
 
 export function readInsightsCache(nowMs: number): InsightsCache | null {
@@ -378,8 +480,8 @@ export function formatDailyHistory(limit?: number): string {
  * Null = nothing worth saying (don't show an empty brief).
  */
 export function formatBrief(
-  cache: InsightsCache,
-  nowMs: number = Date.parse(cache.updatedAt),
+  cache: BriefData,
+  nowMs: number = Date.now(),
   rotation?: number,
 ): string | null {
   const d = cache.day;

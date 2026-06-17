@@ -37,6 +37,7 @@ const DEFAULTS = {
   recencyHalfLifeDays: 30,
   recencyWeight: 0.25,
   repoScopedAsk: true,
+  repoScopedBrief: true,
 } satisfies Partial<Config>;
 
 const REQUIRED_KEYS = ["author", "supabaseUrl", "supabaseKey", "openaiKey"] as const;

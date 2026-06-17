@@ -79,6 +79,14 @@ export interface Config {
    * `--all-repos` / `--repo`). Set false to search across all repos by default.
    */
   repoScopedAsk?: boolean;
+  /**
+   * Scope the session-start brief to the git repo you're starting a session in.
+   * When true (the default), the brief shows only this project's numbers, tips,
+   * and "where you left off" — and stays silent entirely when the current repo
+   * has no captured Oh history (an untracked project gets no brief). Set false
+   * to show the all-repos brief everywhere, as before.
+   */
+  repoScopedBrief?: boolean;
 }
 
 /** Token usage attributable to a single event (already deduped/diffed by the parser). */
